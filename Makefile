@@ -30,6 +30,7 @@ COCKPIT_REPO_FILES = \
 	pkg/lib \
 	test/common \
 	tools/node-modules \
+	tools/build-debian-copyright \
 	$(NULL)
 
 COCKPIT_REPO_URL = https://github.com/cockpit-project/cockpit.git
@@ -82,13 +83,14 @@ po/LINGUAS:
 
 $(SPEC): packaging/$(SPEC).in $(DIST_TEST)
 	provides=$$(awk '{print "Provides: bundled(npm(" $$1 ")) = " $$2}' runtime-npm-modules.txt); \
-	awk -v p="$$provides" '{gsub(/%{VERSION}/, "$(VERSION)"); gsub(/%{NPM_PROVIDES}/, p)}1' $< > $@
+	awk -v p="$$provides" '{gsub(/%{VERSION}/, "$(VERSION)"); $(SUB_NODE_ENV) gsub(/%{NPM_PROVIDES}/, p)}1' $< > $@
+
+$(DIST_TEST): $(COCKPIT_REPO_STAMP) $(shell find src/ -type f) package.json build.js
+	$(MAKE) package-lock.json && NODE_ENV=$(NODE_ENV) ./build.js
 
 packaging/arch/PKGBUILD: packaging/arch/PKGBUILD.in
 	sed 's/VERSION/$(VERSION)/; s/SOURCE/$(TARFILE)/' $< > $@
 
-$(DIST_TEST): $(NODE_MODULES_TEST) $(COCKPIT_REPO_STAMP) $(shell find src/ -type f) package.json build.js
-	NODE_ENV=$(NODE_ENV) ./build.js
 
 watch: $(NODE_MODULES_TEST) $(COCKPIT_REPO_STAMP)
 	NODE_ENV=$(NODE_ENV) ./build.js --watch
@@ -195,11 +197,10 @@ codecheck: test/common $(NODE_MODULES_TEST)
 bots: $(COCKPIT_REPO_STAMP)
 	test/common/make-bots
 
-$(NODE_MODULES_TEST): package.json
-	# if it exists already, npm install won't update it; force that so that we always get up-to-date packages
-	rm -f package-lock.json
-	# unset NODE_ENV, skips devDependencies otherwise; this often hangs, so try a few times
-	for _ in `seq 3`; do timeout 10m env -u NODE_ENV npm install --ignore-scripts && exit 0; done; exit 1
-	env -u NODE_ENV npm prune
+# We want tools/node-modules to run every time package-lock.json is requested
+# See https://www.gnu.org/software/make/manual/html_node/Force-Targets.html
+FORCE:
+package-lock.json: FORCE $(COCKPIT_REPO_STAMP)
+	tools/node-modules make_package_lock_json
 
 .PHONY: all clean install devel-install devel-uninstall print-version dist node-cache rpm prepare-check check vm print-vm

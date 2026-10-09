@@ -1,6 +1,7 @@
 summary:
     Run browser integration tests on the host
 require:
+  - podman
   - cockpit-system-roles
   - cockpit-ws
   - cockpit-system
