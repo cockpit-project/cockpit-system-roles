@@ -1,58 +1,31 @@
 /*
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
- * Copyright (C) 2017 Red Hat, Inc.
+ * Copyright (C) 2026 Red Hat, Inc.
  */
 
-import React, { useState } from 'react';
-
 import cockpit from 'cockpit';
-import * as python from "python";
-import { useInit} from "hooks";
+import React, { useState } from 'react';
+import { useDialogs, WithDialogs } from "dialogs";
 
 import { Page, PageSection } from '@patternfly/react-core/dist/esm/components/Page/index.js';
-import { Card, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card/index.js';
+import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card/index.js';
 import { Table, Thead, Tbody, Tr, Th, Td, ExpandableRowContent } from '@patternfly/react-table';
 import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye/index.js';
+import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner/index.js';
+import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState/index.js';
+import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 
 const _ = cockpit.gettext;
 
-import discover_system_roles_py from "./discover-system-roles.py";
-
-interface Option {
-    type: string,
-    description: string,
-    default?: string,
-    choices?: string[],
-}
-
-interface ArgumentSpecs {
-    short_description?: string,
-    description?: string,
-    options: Record<string, Option>,
-};
-
-interface SystemRole {
-    path: string,
-    name: string,
-    description: string | null,
-    arguments: null | Record<string, ArgumentSpecs>,
-    meta: unknown,
-}
-
-interface DiscoverResult {
-    roles: SystemRole[];
-}
-
-async function discover_system_roles(): Promise<DiscoverResult> {
-    return JSON.parse(await python.spawn(discover_system_roles_py, [], { superuser: "try" }));
-}
+import { useAppConfig, AppConfig, Config, RoleConfig } from "./config";
+import { AddRoleDialog } from "./discover";
 
 const RoleRow = ({
     role,
     index,
 } : {
-    role: SystemRole,
+    role: RoleConfig,
     index: number,
 }) => {
     const [expanded, setExpanded] = useState<boolean>(false);
@@ -77,7 +50,7 @@ const RoleRow = ({
             <Tr isExpanded={expanded}>
                 <Td colSpan={3}>
                     <ExpandableRowContent>
-                        {role.arguments && Object.keys(role.arguments.main.options).join(", ")}
+                        {role.vars.map(v => <div>{v.name}</div>)}
                     </ExpandableRowContent>
                 </Td>
             </Tr>
@@ -85,38 +58,72 @@ const RoleRow = ({
     );
 };
 
-export const Application = () => {
-    const [roles, setRoles] = useState<SystemRole[]>([])
-    useInit(
-        async () => {
-            setRoles((await discover_system_roles()).roles);
-        }
+const ConfiguredRoles = ({ config } : { config: AppConfig }) => {
+    const Dialogs = useDialogs();
+
+    function add_role() {
+        Dialogs.show(<AddRoleDialog config={config} />);
+    }
+
+    const actions = (
+        <Button onClick={add_role}>
+            {_("Add System Role")}
+        </Button>
     );
 
     return (
-        <Page className='pf-m-no-sidebar'>
-            <PageSection hasBodyWrapper={false}>
-                <Bullseye>
-                    <h2>{_("Manage your system with Ansible and System Roles")}</h2>
-                </Bullseye>
-            </PageSection>
-            <PageSection hasBodyWrapper={false} isFilled hasOverflowScroll>
-                <Card>
-                    <CardTitle>{_("Available System Roles")}</CardTitle>
-                    <CardBody>
-                        <Table isExpandable>
-                            {
-                                roles.map((r, i) => <RoleRow role={r} index={i} />)
-                            }
-                        </Table>
-                    </CardBody>
-                </Card>
-            </PageSection>
-            <PageSection hasBodyWrapper={false}>
-                <Bullseye>
-                    {_("Footer")}
-                </Bullseye>
-            </PageSection>
-        </Page>
+        <Card>
+            <CardHeader actions={{ actions }}>
+                <CardTitle>{_("Configured System Roles")}</CardTitle>
+            </CardHeader>
+            <Table isExpandable>
+                {
+                    config.config.roles.map((r, i) => <RoleRow key={r.name} role={r} index={i} />)
+                }
+            </Table>
+        </Card>
+    )
+}
+
+const MainSection = ({ config } : { config: AppConfig | Error | null }) => {
+    if (!config)
+        return (
+            <Bullseye>
+                <Spinner />
+            </Bullseye>
+        );
+
+    if (config instanceof Error)
+        return (
+            <EmptyState>
+                {cockpit.format(_("Can't load configuration: $0"), String(config))}
+            </EmptyState>
+        );
+
+    return <ConfiguredRoles config={config} />
+}
+
+
+export const Application = () => {
+    const config = useAppConfig();
+
+    return (
+        <WithDialogs>
+            <Page className='pf-m-no-sidebar'>
+                <PageSection hasBodyWrapper={false}>
+                    <Bullseye>
+                        <h2>{_("Manage your system with Ansible and System Roles")}</h2>
+                    </Bullseye>
+                </PageSection>
+                <PageSection hasBodyWrapper={false} isFilled hasOverflowScroll>
+                    <MainSection config={config} />
+                </PageSection>
+                <PageSection hasBodyWrapper={false}>
+                    <Bullseye>
+                        {_("Footer")}
+                    </Bullseye>
+                </PageSection>
+            </Page>
+        </WithDialogs>
     );
 };
