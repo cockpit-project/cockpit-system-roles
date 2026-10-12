@@ -15,6 +15,7 @@ class TestSystemRoles(testlib.MachineCase):
         self.login_and_go("/system-roles")
 
         b.wait_in_text("body", "Manage your system with Ansible and System Roles")
+        b.assert_pixels("h2", "header")
 
 
 if __name__ == '__main__':
