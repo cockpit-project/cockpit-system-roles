@@ -23,6 +23,11 @@ TAR_ARGS = --sort=name --mtime "@$(shell git show --no-patch --format='%at')" --
 
 all: $(DIST_TEST)
 
+ifeq ($(TEST_COVERAGE),yes)
+RUN_TESTS_OPTIONS+=--coverage
+NODE_ENV=development
+endif
+
 # checkout common files from Cockpit repository required to build this project;
 # this has no API stability guarantee, so check out a stable tag when you start
 # a new project, use the latest release, and update it from time to time
@@ -129,7 +134,7 @@ dist: $(TARFILE)
 # we don't ship node_modules for license and compactness reasons; we ship a
 # pre-built dist/ (so it's not necessary) and ship package-lock.json (so that
 # node_modules/ can be reconstructed if necessary)
-$(TARFILE): export NODE_ENV=production
+$(TARFILE): export NODE_ENV ?= production
 $(TARFILE): $(DIST_TEST) $(SPEC) packaging/arch/PKGBUILD
 	if type appstream-util >/dev/null 2>&1; then appstream-util validate-relax --nonet *.metainfo.xml; fi
 	tar --xz $(TAR_ARGS) -cf $(TARFILE) --transform 's,^,$(RPM_NAME)/,' \
@@ -165,13 +170,19 @@ rpm: $(TARFILE) $(NODE_CACHE) $(SPEC)
 	rm -r "`pwd`/rpmbuild"
 	rm -r "`pwd`/output" "`pwd`/build"
 
+# Don't rebuild bundle inside test RPM if built with NODE_ENV=development
+ifeq ($(NODE_ENV),development)
+VM_NO_REBUILD = --build-options '--define "rebuild_bundle 0"'
+endif
+
 # build a VM with locally built distro pkgs installed
 # disable networking, VM images have mock/pbuilder with the common build dependencies pre-installed
 $(VM_IMAGE): export XZ_OPT=-0
 $(VM_IMAGE): $(TARFILE) $(NODE_CACHE) bots test/vm.install
 	bots/image-customize --no-network --fresh \
 		--upload $(NODE_CACHE):/var/tmp/ --build $(TARFILE) \
-		--script $(CURDIR)/test/vm.install $(TEST_OS)
+		--script $(CURDIR)/test/vm.install $(TEST_OS) \
+		$(VM_NO_REBUILD)
 
 # convenience target for the above
 vm: $(VM_IMAGE)
