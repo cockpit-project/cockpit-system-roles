@@ -10,7 +10,7 @@ import { useDialogs, WithDialogs } from "dialogs";
 
 import { Page, PageSection } from '@patternfly/react-core/dist/esm/components/Page';
 import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card';
-import { Table, Thead, Tbody, Tr, Th, Td, ExpandableRowContent } from '@patternfly/react-table';
+import { Table, Tbody, Tr, Td, ExpandableRowContent } from '@patternfly/react-table';
 import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
@@ -20,8 +20,9 @@ import { TrashIcon } from '@patternfly/react-icons';
 
 const _ = cockpit.gettext;
 
-import { useAppConfig, AppConfig, Config, RoleConfig, VarConfig } from "./config";
+import { useAppConfig, AppConfig, RoleConfig, VarConfig } from "./config";
 import { AddRoleDialog } from "./discover";
+import { PlaybookRunner } from "./run";
 
 const DebouncedTextInput = ({
     value,
@@ -244,9 +245,7 @@ export const Application = () => {
                     <MainSection config={config} />
                 </PageSection>
                 <PageSection hasBodyWrapper={false}>
-                    <Bullseye>
-                        {_("Footer")}
-                    </Bullseye>
+                    { config instanceof AppConfig && <PlaybookRunner config={config} /> }
                 </PageSection>
             </Page>
         </WithDialogs>
