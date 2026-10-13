@@ -15,6 +15,7 @@ import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye/index
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner/index.js';
 import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState/index.js';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
+import { TrashIcon } from '@patternfly/react-icons';
 
 const _ = cockpit.gettext;
 
@@ -23,10 +24,12 @@ import { AddRoleDialog } from "./discover";
 
 const RoleRow = ({
     role,
-    index,
+    rowIndex,
+    remove,
 } : {
     role: RoleConfig,
-    index: number,
+    rowIndex: number,
+    remove: () => void,
 }) => {
     const [expanded, setExpanded] = useState<boolean>(false);
 
@@ -36,7 +39,7 @@ const RoleRow = ({
                 <Td
                     expand={
                         {
-                            rowIndex: index,
+                            rowIndex,
                             isExpanded: expanded,
                             onToggle: () => {
                                 setExpanded(!expanded);
@@ -46,9 +49,16 @@ const RoleRow = ({
                 />
                 <Td>{role.name}</Td>
                 <Td>{role.description}</Td>
+                <Td modifier="fitContent" hasAction>
+                    <Button
+                        onClick={remove}
+                        icon={<TrashIcon />}
+                        variant="plain"
+                    />
+                </Td>
             </Tr>
             <Tr isExpanded={expanded}>
-                <Td colSpan={3}>
+                <Td colSpan={4}>
                     <ExpandableRowContent>
                         {role.vars.map(v => <div>{v.name}</div>)}
                     </ExpandableRowContent>
@@ -65,6 +75,22 @@ const ConfiguredRoles = ({ config } : { config: AppConfig }) => {
         Dialogs.show(<AddRoleDialog config={config} />);
     }
 
+    function remove_role(role) {
+        try {
+            config.modify(
+                conf => {
+                    return {
+                        ...conf,
+                        roles: conf.roles.filter(r => !Object.is(r, role))
+                    };
+                }
+            );
+        } catch (ex) {
+            // XXX - error toast
+            console.log("Failed to remove", ex);
+        }
+    }
+
     const actions = (
         <Button onClick={add_role}>
             {_("Add System Role")}
@@ -78,7 +104,16 @@ const ConfiguredRoles = ({ config } : { config: AppConfig }) => {
             </CardHeader>
             <Table isExpandable>
                 {
-                    config.config.roles.map((r, i) => <RoleRow key={r.name} role={r} index={i} />)
+                    config.config.roles.map(
+                        (r, i) => (
+                            <RoleRow
+                                key={r.name}
+                                role={r}
+                                rowIndex={i}
+                                remove={() => remove_role(r)}
+                            />
+                        )
+                    )
                 }
             </Table>
         </Card>
