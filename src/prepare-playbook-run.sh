@@ -12,8 +12,9 @@ cat >"$dir/run.sh" <<EOF
 
 set -e
 cd "$dir"
+echo "{\"_event\": \"cockpit_system_role_run_start\", \"arguments\": [\"\$@\"]}" >./run.out
 export ANSIBLE_STDOUT_CALLBACK=ansible.posix.jsonl
-ansible-playbook -i localhost, -c local "./playbook.json" 2>"./run.err" >"./run.out"
+ansible-playbook -i localhost, -c local "\$@" "./playbook.json" 2>"./run.err" >>"./run.out"
 EOF
 
 chmod a+x "$dir/run.sh"
