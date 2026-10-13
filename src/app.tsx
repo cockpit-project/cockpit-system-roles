@@ -5,33 +5,121 @@
  */
 
 import cockpit from 'cockpit';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDialogs, WithDialogs } from "dialogs";
 
-import { Page, PageSection } from '@patternfly/react-core/dist/esm/components/Page/index.js';
-import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card/index.js';
+import { Page, PageSection } from '@patternfly/react-core/dist/esm/components/Page';
+import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card';
 import { Table, Thead, Tbody, Tr, Th, Td, ExpandableRowContent } from '@patternfly/react-table';
-import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye/index.js';
-import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner/index.js';
-import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState/index.js';
-import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
+import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
+import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
+import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
+import { Button } from '@patternfly/react-core/dist/esm/components/Button';
+import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
 import { TrashIcon } from '@patternfly/react-icons';
 
 const _ = cockpit.gettext;
 
-import { useAppConfig, AppConfig, Config, RoleConfig } from "./config";
+import { useAppConfig, AppConfig, Config, RoleConfig, VarConfig } from "./config";
 import { AddRoleDialog } from "./discover";
 
+const DebouncedTextInput = ({
+    value,
+    onChange,
+} : {
+    value: string,
+    onChange: (val: string) => void,
+}) => {
+    const [localValue, setLocalValue] = useState<string>(value);
+    const timer = useRef<number>(0);
+
+    useEffect(
+        () => {
+            setLocalValue(value);
+        },
+        [value],
+    )
+
+    return (
+        <TextInput
+            value={localValue}
+            onChange={
+                (_event, val) => {
+                    setLocalValue(val);
+                    if (timer.current)
+                        window.clearTimeout(timer.current);
+                    timer.current = window.setTimeout(
+                        () => {
+                            timer.current = 0;
+                            onChange(val);
+                        },
+                        500);
+                }
+            }
+        />
+    )
+}
+
 const RoleRow = ({
+    config,
     role,
     rowIndex,
-    remove,
 } : {
+    config: AppConfig,
     role: RoleConfig,
     rowIndex: number,
-    remove: () => void,
 }) => {
     const [expanded, setExpanded] = useState<boolean>(false);
+
+    function remove_role() {
+        try {
+            config.modify(
+                conf => {
+                    return {
+                        ...conf,
+                        roles: conf.roles.filter(r => !Object.is(r, role))
+                    };
+                }
+            );
+        } catch (ex) {
+            // XXX - error toast
+            console.log("Failed to remove", ex);
+        }
+    }
+
+    function update_variable(variable: VarConfig, value: string) {
+        console.log("UPDATE", role.name, variable.name, value);
+        try {
+            config.modify(
+                conf => {
+                    return {
+                        ...conf,
+                        roles: conf.roles.map(
+                            r =>
+                                Object.is(r, role)
+                                    ?
+                                    { ...r,
+                                        vars: r.vars.map(
+                                            v =>
+                                                Object.is(v, variable)
+                                                    ?
+                                                    {
+                                                        ...v,
+                                                        value,
+                                                    }
+                                                    : v
+                                        )
+                                    }
+                                    : r
+                        )
+                    };
+                }
+            );
+        } catch (ex) {
+            // XXX - error toast
+            console.log("Failed to update", ex);
+        }
+    }
 
     return (
         <Tbody isExpanded={expanded}>
@@ -51,7 +139,7 @@ const RoleRow = ({
                 <Td>{role.description}</Td>
                 <Td modifier="fitContent" hasAction>
                     <Button
-                        onClick={remove}
+                        onClick={remove_role}
                         icon={<TrashIcon />}
                         variant="plain"
                     />
@@ -60,7 +148,25 @@ const RoleRow = ({
             <Tr isExpanded={expanded}>
                 <Td colSpan={4}>
                     <ExpandableRowContent>
-                        {role.vars.map(v => <div>{v.name}</div>)}
+                        <Table>
+                            <Tbody>
+                                {
+                                    role.vars.map(
+                                        v => (
+                                            <Tr key={v.name}>
+                                                <Td>{v.name}</Td>
+                                                <Td>
+                                                    <DebouncedTextInput
+                                                        value={v.value}
+                                                        onChange={val => update_variable(v, val)}
+                                                    />
+                                                </Td>
+                                            </Tr>
+                                        )
+                                    )
+                                }
+                            </Tbody>
+                        </Table>
                     </ExpandableRowContent>
                 </Td>
             </Tr>
@@ -73,22 +179,6 @@ const ConfiguredRoles = ({ config } : { config: AppConfig }) => {
 
     function add_role() {
         Dialogs.show(<AddRoleDialog config={config} />);
-    }
-
-    function remove_role(role) {
-        try {
-            config.modify(
-                conf => {
-                    return {
-                        ...conf,
-                        roles: conf.roles.filter(r => !Object.is(r, role))
-                    };
-                }
-            );
-        } catch (ex) {
-            // XXX - error toast
-            console.log("Failed to remove", ex);
-        }
     }
 
     const actions = (
@@ -107,10 +197,10 @@ const ConfiguredRoles = ({ config } : { config: AppConfig }) => {
                     config.config.roles.map(
                         (r, i) => (
                             <RoleRow
+                                config={config}
                                 key={r.name}
                                 role={r}
                                 rowIndex={i}
-                                remove={() => remove_role(r)}
                             />
                         )
                     )
