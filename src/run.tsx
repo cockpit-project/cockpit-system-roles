@@ -48,6 +48,11 @@ interface AnsibleEventHosts {
     }
 };
 
+interface AnsibleEvent_CockpitRunStart {
+    _event: "cockpit_system_role_run_start",
+    arguments: string[],
+}
+
 interface AnsibleEvent_PlayStart {
     _event: "v2_playbook_on_play_start",
     play: AnsibleEventPlay,
@@ -90,16 +95,22 @@ interface AnsibleEvent_Stats {
     }
 };
 
-type AnsibleEvent = AnsibleEvent_PlayStart | AnsibleEvent_TaskStart | AnsibleEvent_OK | AnsibleEvent_Skipped | AnsibleEvent_Failed | AnsibleEvent_Stats;
+type AnsibleEvent = AnsibleEvent_CockpitRunStart | AnsibleEvent_PlayStart | AnsibleEvent_TaskStart | AnsibleEvent_OK | AnsibleEvent_Skipped | AnsibleEvent_Failed | AnsibleEvent_Stats;
 
 function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
+    let check_mode: boolean = false;
     let running_task: AnsibleEventTask | null = null;
     let results = [];
 
-    console.log("EVENTS", events);
+    // console.log("EVENTS", events);
 
     for (const event of events) {
-        if (event._event == "v2_playbook_on_play_start") {
+        if (event._event == "cockpit_system_role_run_start") {
+            console.log("ARGS", event.arguments);
+            check_mode = event.arguments.includes("--check");
+            if (check_mode)
+                results.push(<div><i>{_("Drift check run")}</i></div>);
+        } else if (event._event == "v2_playbook_on_play_start") {
             cockpit.assert(!running_task);
             results.push(<div><b>{event.play.name}</b></div>);
         } else if (event._event == "v2_playbook_on_task_start" || event._event == "v2_playbook_on_handler_task_start") {
@@ -108,9 +119,11 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
         } else if (event._event == "v2_runner_on_ok") {
             cockpit.assert(running_task && running_task.id == event.task.id);
             running_task = null;
-            if (event.hosts.localhost.changed)
-                results.push(<div>{event.task.name} {_("CHANGED")}</div>);
-            else if (show_all)
+            if (event.hosts.localhost.changed) {
+                results.push(<div>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</div>);
+                if (event.hosts.localhost.msg)
+                    results.push(<div>- {event.hosts.localhost.msg}</div>);
+            } else if (show_all)
                 results.push(<div>{event.task.name} {_("(no change)")}</div>);
         } else if (event._event == "v2_runner_on_skipped") {
             cockpit.assert(running_task && running_task.id == event.task.id);
@@ -130,7 +143,22 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
             }
         } else if (event._event == "v2_playbook_on_stats") {
             cockpit.assert(!running_task);
-            results.push(<div>{JSON.stringify(event.stats.localhost)}</div>);
+            results.push(<br />);
+            const stats = event.stats.localhost;
+            if (stats.changed != 0) {
+                if (check_mode)
+                    results.push(<div>{cockpit.format(_("$0 tasks have reported differences between the desired and the actual state of the machine."), stats.changed)}</div>);
+                else
+                    results.push(<div>{cockpit.format(_("$0 tasks have made changes."), stats.changed)}</div>);
+            }
+            if (stats.failures != 0)
+                results.push(<div>{cockpit.format(_("$0 tasks have failed."), stats.failures)}</div>);
+            if (stats.changed == 0 && stats.failures == 0) {
+                if (check_mode)
+                    results.push(<div>{_("The machine is in the desired state.")}</div>);
+                else
+                    results.push(<div>{_("Nothing interesting has happened.")}</div>);
+            }
         }
     }
 
@@ -168,11 +196,11 @@ export const PlaybookRunner = ({
         );
     }
 
-    async function run() {
+    async function run(dry: boolean) {
         try {
             const playbook = generate_playbook();
             await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
-            process.run([ "/bin/sh", "/run/cockpit/system-roles/run.sh" ], {});
+            process.run([ "/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : []) ], {});
         } catch (ex) {
             // XXX - error toast
             console.log("Can't run", ex);
@@ -207,9 +235,17 @@ export const PlaybookRunner = ({
                 {_("Idle")}
                 {"\n"}
                 <Button
-                    onClick={run}
+                    onClick={() => run(false)}
+                    variant="danger"
                 >
                     {_("Run")}
+                </Button>
+                {"\n"}
+                <Button
+                    onClick={() => run(true)}
+                    variant="secondary"
+                >
+                    {_("Check")}
                 </Button>
             </>
         );
