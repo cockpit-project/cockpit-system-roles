@@ -14,15 +14,26 @@ import { Table, Tbody, Tr, Td, ExpandableRowContent } from '@patternfly/react-ta
 import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
-import { Button } from '@patternfly/react-core/dist/esm/components/Button';
+import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
-import { TrashIcon } from '@patternfly/react-icons';
+import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
 
 const _ = cockpit.gettext;
 
 import { useAppConfig, AppConfig, RoleConfig, VarConfig } from "./config";
 import { AddRoleDialog } from "./discover";
 import { PlaybookRunner } from "./run";
+
+const ExternalLinkButton = (props : ButtonProps) => (
+    <Button
+        component="a"
+        icon={<RhUiExternalLinkIcon />}
+        iconPosition="right"
+        rel="noopener noreferrer"
+        target="_blank"
+        {...props}
+    />
+);
 
 const DebouncedTextInput = ({
     value,
@@ -89,7 +100,6 @@ const RoleRow = ({
     }
 
     function update_variable(variable: VarConfig, value: string) {
-        console.log("UPDATE", role.name, variable.name, value);
         try {
             config.modify(
                 conf => {
@@ -138,16 +148,24 @@ const RoleRow = ({
                 />
                 <Td>{role.name}</Td>
                 <Td>{role.description}</Td>
+                <Td>
+                    <ExternalLinkButton
+                        href={"https://linux-system-roles.github.io/" + role.name}
+                        variant="link"
+                    >
+                        {_("Documentation")}
+                    </ExternalLinkButton>
+                </Td>
                 <Td modifier="fitContent" hasAction>
                     <Button
                         onClick={remove_role}
-                        icon={<TrashIcon />}
+                        icon={<RhUiTrashIcon />}
                         variant="plain"
                     />
                 </Td>
             </Tr>
             <Tr isExpanded={expanded}>
-                <Td colSpan={4}>
+                <Td colSpan={5}>
                     <ExpandableRowContent>
                         <Table>
                             <Tbody>
