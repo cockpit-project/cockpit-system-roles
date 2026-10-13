@@ -14,6 +14,7 @@ export interface VarConfig {
 
 export interface RoleConfig {
     name: string;
+    full_name: string;
     description: string;
     vars: VarConfig[];
 }

@@ -9,6 +9,7 @@ import React, { useState } from "react";
 import { useInit} from "hooks";
 import * as python from "python";
 import { useDialogs} from "dialogs";
+import {basename } from "cockpit-path";
 
 import { Modal, ModalBody, ModalHeader, ModalFooter } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
@@ -64,6 +65,7 @@ export const AddRoleDialog = ({ config } : { config: AppConfig }) => {
         try {
             const role_config: RoleConfig = {
                 name: role.name,
+                full_name: basename(role.path),
                 description: role.description || "",
                 vars: Object.keys(role.arguments.main.options).map(o => ({ name: o, value: "" }))
             }
