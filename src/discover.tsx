@@ -5,7 +5,7 @@
  */
 
 import cockpit from "cockpit";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useInit} from "hooks";
 import * as python from "python";
 import { useDialogs} from "dialogs";
@@ -35,7 +35,7 @@ interface ArgumentSpecs {
     options: Record<string, Option>,
 };
 
-interface SystemRole {
+export interface SystemRole {
     path: string,
     name: string,
     description: string | null,
@@ -51,15 +51,36 @@ async function discover_system_roles(): Promise<DiscoverResult> {
     return JSON.parse(await python.spawn(discover_system_roles_py, [], { superuser: "try" }));
 }
 
-export const AddRoleDialog = ({ config } : { config: AppConfig }) => {
-    const Dialogs = useDialogs();
+export const useSystemRoles = () => {
+    const [roles, setRoles] = useState<SystemRole[] | Error | null>(null);
 
-    const [roles, setRoles] = useState<SystemRole[] | null>(null)
-    useInit(
-        async () => {
-            setRoles((await discover_system_roles()).roles);
-        }
+    useEffect(
+        () => {
+            async function doit() {
+                try {
+                    const result = await discover_system_roles();
+                    setRoles(result.roles);
+                } catch (ex) {
+                    setRoles(new Error(String(ex)));
+                }
+            }
+
+            doit();
+        },
+        [],
     );
+
+    return roles;
+};
+
+export const AddRoleDialog = ({
+    config,
+    roles
+} : {
+    config: AppConfig,
+    roles: SystemRole[],
+}) => {
+    const Dialogs = useDialogs();
 
     async function add_role(role: SystemRole) {
         try {
@@ -68,43 +89,38 @@ export const AddRoleDialog = ({ config } : { config: AppConfig }) => {
             const role_config: RoleConfig = {
                 name: role.name,
                 full_name: basename(role.path),
-                description: role.description || "",
-                vars: Object.keys(options).map(o => ({ name: o, value: "", description: options[o].description || null, type: options[o].type || null }))
+                vars: {},
             };
             await config.modify(conf => ({ ...conf, roles: [ ...conf.roles, role_config ] }));
             Dialogs.close();
         } catch (ex) {
-            // XXX - put into dialog
+            // XXX - error toast
             console.error(ex);
         }
     }
 
-    let body;
-    if (!roles)
-        body = <Spinner />;
-    else
-        body = (
-            <Table>
-                <Tbody>
-                    {
-                        roles
-                            .filter(r => r.arguments?.main?.options)
-                            .map(
-                                r => (
-                                    <Tr
-                                        key={r.path}
-                                        isClickable
-                                        onRowClick={() => add_role(r)}
-                                    >
-                                        <Td>{r.name}</Td>
-                                        <Td>{r.description}</Td>
-                                    </Tr>
-                                )
+    const body = (
+        <Table>
+            <Tbody>
+                {
+                    roles
+                        .filter(r => r.arguments?.main?.options)
+                        .map(
+                            r => (
+                                <Tr
+                                    key={r.path}
+                                    isClickable
+                                    onRowClick={() => add_role(r)}
+                                >
+                                    <Td>{r.name}</Td>
+                                    <Td>{r.description}</Td>
+                                </Tr>
                             )
-                    }
-                </Tbody>
-            </Table>
-        );
+                        )
+                }
+            </Tbody>
+        </Table>
+    );
 
     return (
         <Modal
