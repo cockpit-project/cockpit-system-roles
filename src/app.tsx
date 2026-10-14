@@ -15,7 +15,6 @@ import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
 import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
-import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
 import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
 import { Remarkable } from "remarkable";
 
@@ -24,6 +23,7 @@ const _ = cockpit.gettext;
 import { useAppConfig, AppConfig, RoleConfig, VarConfig } from "./config";
 import { useSystemRoles, SystemRole, AddRoleDialog } from "./discover";
 import { PlaybookRunner } from "./run";
+import { EditVariable } from "./edit";
 
 const ExternalLinkButton = (props : ButtonProps) => (
     <Button
@@ -35,43 +35,6 @@ const ExternalLinkButton = (props : ButtonProps) => (
         {...props}
     />
 );
-
-const DebouncedTextInput = ({
-    value,
-    onChange,
-} : {
-    value: string,
-    onChange: (val: string) => void,
-}) => {
-    const [localValue, setLocalValue] = useState<string>(value);
-    const timer = useRef<number>(0);
-
-    useEffect(
-        () => {
-            setLocalValue(value);
-        },
-        [value],
-    )
-
-    return (
-        <TextInput
-            value={localValue}
-            onChange={
-                (_event, val) => {
-                    setLocalValue(val);
-                    if (timer.current)
-                        window.clearTimeout(timer.current);
-                    timer.current = window.setTimeout(
-                        () => {
-                            timer.current = 0;
-                            onChange(val);
-                        },
-                        500);
-                }
-            }
-        />
-    )
-}
 
 const RoleRow = ({
     config,
@@ -99,34 +62,6 @@ const RoleRow = ({
         } catch (ex) {
             // XXX - error toast
             console.log("Failed to remove", ex);
-        }
-    }
-
-    function update_variable(name: string, value: string) {
-        try {
-            config.modify(
-                conf => {
-                    return {
-                        ...conf,
-                        roles: conf.roles.map(
-                            r =>
-                                Object.is(r, role)
-                                    ?
-                                    {
-                                        ...r,
-                                        vars: {
-                                            ...r.vars,
-                                            [name]: { value } // XXX - keep rest
-                                        }
-                                    }
-                                    : r
-                        )
-                    };
-                }
-            );
-        } catch (ex) {
-            // XXX - error toast
-            console.log("Failed to update", ex);
         }
     }
 
@@ -192,9 +127,11 @@ const RoleRow = ({
                                                     />
                                                     <Td modifier="fitContent">{sys_v.type}</Td>
                                                     <Td>
-                                                        <DebouncedTextInput
-                                                            value={conf_v ? conf_v.value : ""}
-                                                            onChange={val => update_variable(name, val)}
+                                                        <EditVariable
+                                                            config={config}
+                                                            role={role}
+                                                            name={name}
+                                                            spec={sys_v}
                                                         />
                                                     </Td>
                                                 </Tr>
