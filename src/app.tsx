@@ -22,7 +22,7 @@ import { Remarkable } from "remarkable";
 const _ = cockpit.gettext;
 
 import { useAppConfig, AppConfig, RoleConfig, VarConfig } from "./config";
-import { AddRoleDialog } from "./discover";
+import { useSystemRoles, SystemRole, AddRoleDialog } from "./discover";
 import { PlaybookRunner } from "./run";
 
 const ExternalLinkButton = (props : ButtonProps) => (
@@ -76,10 +76,12 @@ const DebouncedTextInput = ({
 const RoleRow = ({
     config,
     role,
+    system_role,
     rowIndex,
 } : {
     config: AppConfig,
     role: RoleConfig,
+    system_role: SystemRole,
     rowIndex: number,
 }) => {
     const [expanded, setExpanded] = useState<boolean>(false);
@@ -100,7 +102,7 @@ const RoleRow = ({
         }
     }
 
-    function update_variable(variable: VarConfig, value: string) {
+    function update_variable(name: string, value: string) {
         try {
             config.modify(
                 conf => {
@@ -110,17 +112,12 @@ const RoleRow = ({
                             r =>
                                 Object.is(r, role)
                                     ?
-                                    { ...r,
-                                        vars: r.vars.map(
-                                            v =>
-                                                Object.is(v, variable)
-                                                    ?
-                                                    {
-                                                        ...v,
-                                                        value,
-                                                    }
-                                                    : v
-                                        )
+                                    {
+                                        ...r,
+                                        vars: {
+                                            ...r.vars,
+                                            [name]: { value } // XXX - keep rest
+                                        }
                                     }
                                     : r
                         )
@@ -156,7 +153,7 @@ const RoleRow = ({
                     }
                 />
                 <Td>{role.name}</Td>
-                <Td>{role.description}</Td>
+                <Td>{system_role.description}</Td>
                 <Td>
                     <ExternalLinkButton
                         href={"https://linux-system-roles.github.io/" + role.name}
@@ -179,27 +176,30 @@ const RoleRow = ({
                         <Table>
                             <Tbody>
                                 {
-                                    role.vars.map(
-                                        v => (
-                                            <Tr key={v.name}>
-                                                <Td modifier="fitContent">{shorten(v.name)}</Td>
-                                                <Td
-                                                    width={30}
-                                                    dangerouslySetInnerHTML={
-                                                        {
-                                                            __html: remarkable.render(v.description)
+                                    Object.entries(system_role.arguments?.main?.options || {}).map(
+                                        ([name, sys_v]) => {
+                                            const conf_v = role.vars[name];
+                                            return (
+                                                <Tr key={name}>
+                                                    <Td modifier="fitContent">{shorten(name)}</Td>
+                                                    <Td
+                                                        width={30}
+                                                        dangerouslySetInnerHTML={
+                                                            {
+                                                                __html: remarkable.render(sys_v.description)
+                                                            }
                                                         }
-                                                    }
-                                                />
-                                                <Td modifier="fitContent">{v.type}</Td>
-                                                <Td>
-                                                    <DebouncedTextInput
-                                                        value={v.value}
-                                                        onChange={val => update_variable(v, val)}
                                                     />
-                                                </Td>
-                                            </Tr>
-                                        )
+                                                    <Td modifier="fitContent">{sys_v.type}</Td>
+                                                    <Td>
+                                                        <DebouncedTextInput
+                                                            value={conf_v ? conf_v.value : ""}
+                                                            onChange={val => update_variable(name, val)}
+                                                        />
+                                                    </Td>
+                                                </Tr>
+                                            );
+                                        }
                                     )
                                 }
                             </Tbody>
@@ -211,11 +211,17 @@ const RoleRow = ({
     );
 };
 
-const ConfiguredRoles = ({ config } : { config: AppConfig }) => {
+const ConfiguredRoles = ({
+    config,
+    roles,
+} : {
+    config: AppConfig
+    roles: SystemRole[],
+}) => {
     const Dialogs = useDialogs();
 
     function add_role() {
-        Dialogs.show(<AddRoleDialog config={config} />);
+        Dialogs.show(<AddRoleDialog config={config} roles={roles} />);
     }
 
     const actions = (
@@ -232,14 +238,18 @@ const ConfiguredRoles = ({ config } : { config: AppConfig }) => {
             <Table isExpandable>
                 {
                     config.config.roles.map(
-                        (r, i) => (
-                            <RoleRow
-                                config={config}
-                                key={r.name}
-                                role={r}
-                                rowIndex={i}
-                            />
-                        )
+                        (r, i) => {
+                            const sys_r = roles.find(sr => sr.name == r.name); // XXX - use hashtable
+                            return (
+                                <RoleRow
+                                    config={config}
+                                    key={r.name}
+                                    role={r}
+                                    system_role={sys_r}
+                                    rowIndex={i}
+                                />
+                            );
+                        }
                     )
                 }
             </Table>
@@ -247,8 +257,14 @@ const ConfiguredRoles = ({ config } : { config: AppConfig }) => {
     )
 }
 
-const MainSection = ({ config } : { config: AppConfig | Error | null }) => {
-    if (!config)
+const MainSection = ({
+    config,
+    roles,
+} : {
+    config: AppConfig | Error | null,
+    roles: SystemRole[] | Error | null,
+}) => {
+    if (!config || !roles)
         return (
             <Bullseye>
                 <Spinner />
@@ -262,12 +278,20 @@ const MainSection = ({ config } : { config: AppConfig | Error | null }) => {
             </EmptyState>
         );
 
-    return <ConfiguredRoles config={config} />
+    if (roles instanceof Error)
+        return (
+            <EmptyState>
+                {cockpit.format(_("Can't load system roles: $0"), String(roles))}
+            </EmptyState>
+        );
+
+    return <ConfiguredRoles config={config} roles={roles} />
 }
 
 
 export const Application = () => {
     const config = useAppConfig();
+    const roles = useSystemRoles();
 
     return (
         <WithDialogs>
@@ -278,7 +302,7 @@ export const Application = () => {
                     </Bullseye>
                 </PageSection>
                 <PageSection hasBodyWrapper={false} isFilled hasOverflowScroll>
-                    <MainSection config={config} />
+                    <MainSection config={config} roles={roles} />
                 </PageSection>
                 <PageSection hasBodyWrapper={false}>
                     { config instanceof AppConfig && <PlaybookRunner config={config} /> }

@@ -8,17 +8,13 @@ import { useState, useEffect } from "react";
 import cockpit from "cockpit";
 
 export interface VarConfig {
-    name: string;
     value: string;  // Always JSON, but maybe not valid
-    description: string | null;
-    type: string | null;
 }
 
 export interface RoleConfig {
     name: string;
     full_name: string;
-    description: string;
-    vars: VarConfig[];
+    vars: Record<string, VarConfig>;
 }
 
 export interface Config {
