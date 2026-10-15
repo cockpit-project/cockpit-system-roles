@@ -12,9 +12,12 @@ import { useDialogs } from "dialogs";
 import { Modal, ModalBody, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 
+import { toaster } from "./toaster";
 import { AppConfig, RoleConfig } from "./config";
 
 import discover_system_roles_py from "./discover-system-roles.py";
+
+const _ = cockpit.gettext;
 
 export interface Option {
     type?: string,
@@ -93,11 +96,10 @@ export const AddRoleDialog = ({
                 vars: {},
             };
             await config.modify(conf => ({ ...conf, roles: [...conf.roles, role_config] }));
-            Dialogs.close();
         } catch (ex) {
-            // XXX - error toast
-            console.error(ex);
+            toaster.add_error(_("Failed to add role"), ex);
         }
+        Dialogs.close();
     }
 
     console.log("R", Object.values(roles));

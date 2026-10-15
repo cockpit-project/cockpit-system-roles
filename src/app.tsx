@@ -18,6 +18,7 @@ import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/
 import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
 import { Remarkable } from "remarkable";
 
+import { ToastArea, toaster } from "./toaster";
 import { useAppConfig, AppConfig, RoleConfig } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, AddRoleDialog } from "./discover";
 import { PlaybookRunner } from "./run";
@@ -60,8 +61,7 @@ const RoleRow = ({
                 }
             );
         } catch (ex) {
-            // XXX - error toast
-            console.log("Failed to remove", ex);
+            toaster.add_error(_("Failed to remove role"), ex);
         }
     }
 
@@ -227,6 +227,7 @@ export const Application = () => {
 
     return (
         <WithDialogs>
+            <ToastArea />
             <Page className='pf-m-no-sidebar'>
                 <PageSection hasBodyWrapper={false}>
                     <Bullseye>
