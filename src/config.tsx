@@ -29,8 +29,6 @@ export class AppConfig {
     constructor (file: cockpit.FileHandle<unknown>, data: unknown, tag: string) {
         this.#file = file;
         this.#tag = tag;
-
-        // XXX use json_import
         this.config = data as Config;
     }
 
