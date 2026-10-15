@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import cockpit from "cockpit";
 
 export interface VarConfig {
-    value: string;  // Always JSON, but maybe not valid
+    value: string; // Always JSON, but maybe not valid
 }
 
 export interface RoleConfig {
@@ -29,7 +29,7 @@ export class AppConfig {
 
     constructor (file: cockpit.FileHandle<unknown>, data: unknown, tag: string) {
         this.#file = file;
-        this.#tag = tag
+        this.#tag = tag;
 
         // XXX use json_import
         this.config = data as Config;
@@ -69,4 +69,4 @@ export const useAppConfig = () => {
     );
 
     return config;
-}
+};

@@ -5,6 +5,7 @@ import glob
 import json
 import os
 import sys
+
 import yaml
 
 # This program discovers all Linux System Roles and outputs a JSON
