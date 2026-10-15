@@ -10,6 +10,7 @@ import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput'
 import { Checkbox } from '@patternfly/react-core/dist/esm/components/Checkbox';
 import { SimpleSelect } from 'cockpit-components-simple-select';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
+import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
 import { FileChooserInput } from 'cockpit/react/FileChooser';
 
 import { AppConfig, RoleConfig } from "./config";
@@ -199,6 +200,28 @@ const EditPath = ({
     );
 }
 
+function validate_value(value: string, spec: Option) {
+    if (value == "")
+        return;
+    if (spec.type == "raw") {
+        try {
+            JSON.parse(value);
+        } catch (ex) {
+            return _("Must be valid JSON");
+        }
+    }
+    if (spec.type == "int") {
+        let val;
+        try {
+            val = JSON.parse(value);
+        } catch (ex) {
+            return _("Must be an integer");
+        }
+        if (!Number.isInteger(val))
+            return _("Must be an integer");
+    }
+}
+
 export const EditVariable = ({
     config,
     role,
@@ -246,6 +269,15 @@ export const EditVariable = ({
     else
         comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />;
 
+    const error = validate_value(value, spec);
+    let helper_text;
+    if (error)
+        helper_text = (
+            <HelperText>
+                <HelperTextItem variant="error">{error}</HelperTextItem>
+            </HelperText>
+        );
+
     if (need_checkbox)
         return (
             <>
@@ -275,12 +307,14 @@ export const EditVariable = ({
                 />
                 <br />
                 {enabled && comp}
+                {helper_text}
             </>
         );
     else
         return (
             <>
                 {comp}
+                {helper_text}
             </>
         );
 }
