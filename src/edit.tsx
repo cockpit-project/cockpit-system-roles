@@ -13,7 +13,7 @@ import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
 import { FileChooserInput } from 'cockpit/react/FileChooser';
 
-import { AppConfig, RoleConfig } from "./config";
+import { AppConfig, RoleConfig, VarConfig } from "./config";
 import { Option } from "./discover";
 
 const _ = cockpit.gettext;
@@ -79,24 +79,32 @@ const DebouncedTextInput = ({
 };
 
 function update_variable(config: AppConfig, role: RoleConfig, name: string, value: string) {
+    function update_vars(vars: Record<string, VarConfig>) {
+        if (value !== "")
+            return {
+                ...vars,
+                [name]: { ...vars[name], value }
+            };
+        else {
+            const new_vars = { ...vars };
+            delete new_vars[name];
+            return new_vars;
+        }
+    }
+
+    function update_role(r: RoleConfig) {
+        if (Object.is(r, role))
+            return { ...r, vars: update_vars(r.vars) };
+        else
+            return r;
+    }
+
     try {
-        // XXX - remove completely when value == ""
         config.modify(
             conf => {
                 return {
                     ...conf,
-                    roles: conf.roles.map(
-                        r =>
-                            Object.is(r, role)
-                                ? {
-                                    ...r,
-                                    vars: {
-                                        ...r.vars,
-                                        [name]: { value } // XXX - keep rest
-                                    }
-                                }
-                                : r
-                    )
+                    roles: conf.roles.map(update_role)
                 };
             }
         );
