@@ -216,7 +216,7 @@ export const PlaybookRunner = ({
         return roles.map(
             role => {
                 return {
-                    name: role.full_name,
+                    name: role.name,
                     hosts: "all",
                     vars: (
                         Object.fromEntries(
@@ -224,7 +224,7 @@ export const PlaybookRunner = ({
                                     .filter(([, conf]) => !!conf.value)
                                     .map(([name, conf]) => [name, JSON.parse(conf.value)]))
                     ),
-                    roles: [role.full_name],
+                    roles: [role.name],
                 };
             }
         );
