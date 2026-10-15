@@ -13,6 +13,7 @@ import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
 import { FileChooserInput } from 'cockpit/react/FileChooser';
 
+import { toaster } from "./toaster";
 import { AppConfig, RoleConfig, VarConfig } from "./config";
 import { Option } from "./discover";
 
@@ -78,7 +79,7 @@ const DebouncedTextInput = ({
     );
 };
 
-function update_variable(config: AppConfig, role: RoleConfig, name: string, value: string) {
+async function update_variable(config: AppConfig, role: RoleConfig, name: string, value: string) {
     function update_vars(vars: Record<string, VarConfig>) {
         if (value !== "")
             return {
@@ -100,7 +101,7 @@ function update_variable(config: AppConfig, role: RoleConfig, name: string, valu
     }
 
     try {
-        config.modify(
+        await config.modify(
             conf => {
                 return {
                     ...conf,
@@ -109,8 +110,7 @@ function update_variable(config: AppConfig, role: RoleConfig, name: string, valu
             }
         );
     } catch (ex) {
-        // XXX - error toast
-        console.log("Failed to update", ex);
+        toaster.add_error(_("Failed to update the configuration"), ex);
     }
 }
 

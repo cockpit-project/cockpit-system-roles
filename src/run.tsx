@@ -5,8 +5,8 @@
  */
 
 import cockpit from 'cockpit';
-import React, { useReducer, useState, useEffect } from 'react';
-import { useInit, useFile } from "hooks";
+import React, { useReducer, useState, useEffect, useRef } from 'react';
+import { useInit } from "hooks";
 import { LongRunningProcess, ProcessState } from "long-running-process";
 
 import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card';
@@ -14,6 +14,7 @@ import { Button } from '@patternfly/react-core/dist/esm/components/Button';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 
+import { toaster } from "./toaster";
 import { AppConfig } from "./config";
 
 import prepare_playbook_run_sh from "./prepare-playbook-run.sh";
@@ -109,16 +110,13 @@ export const useAnsibleEvents = (): AnsibleEvent[] | Error | null => {
             );
 
             file.watch(
-                (data, tag, error) => {
+                (data, _tag, error) => {
                     if (error)
                         setEvents(new Error(error.message));
-                    else {
-                        cockpit.assert(tag);
-                    if (data)
+                    else if (data)
                         setEvents(data as AnsibleEvent[]);
                     else
                         setEvents([]);
-                    }
                 }
             );
         },
@@ -203,11 +201,29 @@ export const PlaybookRunner = ({
 } : {
     config: AppConfig,
 }) => {
+    const previousState = useRef(ProcessState.INIT);
     const [, forceUpdate] = useReducer(x => x + 1, 0);
-    const process = useInit(() => new LongRunningProcess("cockpit-system-roles-runner.service", forceUpdate));
+    const process = useInit(
+        () => {
+            return new LongRunningProcess(
+                "cockpit-system-roles-runner.service",
+                async (pr: LongRunningProcess) => {
+                    forceUpdate();
+
+                    const prev = previousState.current;
+                    previousState.current = pr.state;
+
+                    if (pr.state === ProcessState.FAILED && prev !== ProcessState.FAILED) {
+                        const err = await cockpit.file("/run/cockpit/system-roles/run.err").read();
+                        toaster.add(_("Playbook execution failed"), err);
+                        pr.reset();
+                    }
+                }
+            );
+        }
+    );
 
     const output = useAnsibleEvents();
-    const error_output: string | false | null = useFile("/run/cockpit/system-roles/run.err", { superuser: "try" });
 
     const [showAll, setShowAll] = useState<boolean>(false);
 
@@ -234,10 +250,11 @@ export const PlaybookRunner = ({
         try {
             const playbook = generate_playbook();
             await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
+            if (process.state === ProcessState.FAILED)
+                process.reset();
             process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : [])], {});
         } catch (ex) {
-            // XXX - error toast
-            console.log("Can't run", ex);
+            toaster.add_error(_("Failed to start the playbook"), ex);
         }
     }
 
@@ -245,18 +262,7 @@ export const PlaybookRunner = ({
         try {
             await process.terminate();
         } catch (ex) {
-            // XXX - error toast
-            console.log("Can't terminate", ex);
-        }
-    }
-
-    async function reset() {
-        try {
-            await cockpit.spawn(["rm", "-f", "/run/cockpit/system-roles/run.err"], { superuser: "require" });
-            process.reset();
-        } catch (ex) {
-            // XXX - error toast
-            console.log("Can't reset", ex);
+            toaster.add_error(_("Failed to terminate the playbook"), ex);
         }
     }
 
@@ -295,18 +301,6 @@ export const PlaybookRunner = ({
                 </Button>
             </>
         );
-    else if (process.state === ProcessState.FAILED)
-        actions = (
-            <>
-                {_("Failed")}
-                {"\n"}
-                <Button
-                    onClick={reset}
-                >
-                    {_("Reset")}
-                </Button>
-            </>
-        );
 
     return (
         <Card>
@@ -321,9 +315,6 @@ export const PlaybookRunner = ({
                     isChecked={showAll}
                     onChange={(_event, val) => setShowAll(val)}
                 />
-            </CardBody>
-            <CardBody>
-                {error_output}
             </CardBody>
             <CardBody>
                 {actions}
