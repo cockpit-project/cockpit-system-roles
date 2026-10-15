@@ -188,13 +188,33 @@ const EditPath = ({
     value: string,
     update: (val: string) => void,
 }) => {
+    const [localValue, setLocalValue] = useState<string>(value.substring(1, value.length - 1));
+    const timer = useRef<number>(0);
+
+    useEffect(
+        () => {
+            setLocalValue(value.substring(1, value.length - 1));
+        },
+        [value],
+    );
+
     return (
         <FileChooserInput
-            value={value.substring(1, value.length - 1)}
+            value={localValue}
             onChange={
-                (val, /* fromDialog */) => {
-                    // XXX - debounce when not from dialog
-                    update('"' + val + '"');
+                (val, fromDialog) => {
+                    setLocalValue(val);
+                    if (timer.current)
+                        window.clearTimeout(timer.current);
+                    if (!fromDialog) {
+                        timer.current = window.setTimeout(
+                            () => {
+                                timer.current = 0;
+                                update('"' + val + '"');
+                            },
+                            500);
+                    } else
+                        update('"' + val + '"');
                 }
             }
             fileChooserProps={
@@ -272,7 +292,7 @@ export const EditVariable = ({
     else if (spec.type === "path")
         comp = <EditPath value={value} update={update} />;
     else if (spec.type === "int")
-        comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />; // XXX - good enough for now
+        comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />;
     else
         comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />;
 
