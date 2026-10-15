@@ -19,7 +19,7 @@ import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
 import { Remarkable } from "remarkable";
 
 import { useAppConfig, AppConfig, RoleConfig } from "./config";
-import { useSystemRoles, SystemRole, AddRoleDialog } from "./discover";
+import { useSystemRoles, SystemRole, SystemRoles, AddRoleDialog } from "./discover";
 import { PlaybookRunner } from "./run";
 import { EditVariable } from "./edit";
 
@@ -65,12 +65,6 @@ const RoleRow = ({
         }
     }
 
-    function shorten(name: string): string {
-        if (name.startsWith(role.name + "_"))
-            return name.substring(role.name.length + 1);
-        return name;
-    }
-
     const remarkable = new Remarkable();
 
     return (
@@ -88,7 +82,7 @@ const RoleRow = ({
                     }
                 />
                 <Td>{role.name}</Td>
-                <Td>{system_role.description}</Td>
+                <Td>{system_role.meta?.galaxy_info?.description}</Td>
                 <Td>
                     <ExternalLinkButton
                         href={"https://linux-system-roles.github.io/" + role.name}
@@ -111,16 +105,16 @@ const RoleRow = ({
                         <Table>
                             <Tbody>
                                 {
-                                    Object.entries(system_role.arguments?.main?.options || {}).map(
+                                    Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).map(
                                         ([name, sys_v]) => {
                                             return (
                                                 <Tr key={name}>
-                                                    <Td modifier="fitContent">{shorten(name)}</Td>
+                                                    <Td modifier="fitContent">{name}</Td>
                                                     <Td
                                                         width={30}
                                                         dangerouslySetInnerHTML={
                                                             {
-                                                                __html: remarkable.render(sys_v.description)
+                                                                __html: remarkable.render(sys_v.description || "")
                                                             }
                                                         }
                                                     />
@@ -152,7 +146,7 @@ const ConfiguredRoles = ({
     roles,
 } : {
     config: AppConfig
-    roles: SystemRole[],
+    roles: SystemRoles,
 }) => {
     const Dialogs = useDialogs();
 
@@ -175,7 +169,7 @@ const ConfiguredRoles = ({
                 {
                     config.config.roles.map(
                         (r, i) => {
-                            const sys_r = roles.find(sr => sr.name === r.name); // XXX - use hashtable
+                            const sys_r = roles[r.name];
                             if (sys_r)
                                 return (
                                     <RoleRow
@@ -201,7 +195,7 @@ const MainSection = ({
     roles,
 } : {
     config: AppConfig | Error | null,
-    roles: SystemRole[] | Error | null,
+    roles: SystemRoles | Error | null,
 }) => {
     if (!config || !roles)
         return (
