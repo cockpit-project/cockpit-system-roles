@@ -7,6 +7,7 @@
 import cockpit from 'cockpit';
 import React, { useState } from 'react';
 import { useDialogs, WithDialogs } from "dialogs";
+import { superuser } from "superuser";
 
 import { Page, PageSection } from '@patternfly/react-core/dist/esm/components/Page';
 import { Card, CardHeader, CardTitle } from '@patternfly/react-core/dist/esm/components/Card';
@@ -25,6 +26,8 @@ import { PlaybookRunner } from "./run";
 import { EditVariable } from "./edit";
 
 const _ = cockpit.gettext;
+
+superuser.reload_page_on_change();
 
 const ExternalLinkButton = (props : ButtonProps) => (
     <Button
@@ -197,6 +200,13 @@ const MainSection = ({
     config: AppConfig | Error | null,
     roles: SystemRoles | Error | null,
 }) => {
+    if (superuser.allowed === false)
+        return (
+            <EmptyState>
+                {_("Administrative access needed.")}
+            </EmptyState>
+        );
+
     if (!config || !roles)
         return (
             <Bullseye>
@@ -238,7 +248,7 @@ export const Application = () => {
                     <MainSection config={config} roles={roles} />
                 </PageSection>
                 <PageSection hasBodyWrapper={false}>
-                    { config instanceof AppConfig && <PlaybookRunner config={config} /> }
+                    { superuser.allowed && config instanceof AppConfig && <PlaybookRunner config={config} /> }
                 </PageSection>
             </Page>
         </WithDialogs>
