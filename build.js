@@ -100,7 +100,7 @@ const context = await esbuild.context({
     external: ['*.woff', '*.woff2', '*.jpg', '*.svg', '../../assets*'],
     // Move all legal comments to a .LEGAL.txt file
     legalComments: 'external',
-    loader: { ".js": "jsx", ".py": "text" },
+    loader: { ".js": "jsx", ".py": "text", ".sh": "text" },
     minify: production,
     nodePaths,
     outdir,

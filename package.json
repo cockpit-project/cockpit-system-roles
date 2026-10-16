@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/react": "18.3.13",
     "@types/react-dom": "18.3.1",
+    "@types/remarkable": "^2.0.8",
     "@typescript-eslint/eslint-plugin": "8.71.0",
     "esbuild-wasm": "0.28.2",
     "eslint": "8.57.1",
@@ -44,11 +45,14 @@
     "@patternfly/react-core": "6.6.1",
     "@patternfly/react-icons": "6.6.1",
     "@patternfly/react-styles": "6.6.1",
+    "@patternfly/react-table": "6.6.1",
     "argparse": "3.0.2",
+    "dequal": "2.0.3",
     "esbuild": "0.28.2",
     "esbuild-sass-plugin": "3.7.0",
     "gettext-parser": "9.1.1",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
-  }
+    "react-dom": "18.3.1",
+    "remarkable": "2.0.1"
+   }
 }
