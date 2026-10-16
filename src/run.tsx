@@ -129,18 +129,20 @@ export const useAnsibleEvents = (): AnsibleEvent[] | Error | null => {
 function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
     let check_mode: boolean = false;
     let running_task: AnsibleEventTask | null = null;
-    const results = [];
+    const results: React.ReactNode[] = [];
 
-    // console.log("EVENTS", events);
+    function push(elt: React.ReactNode) {
+        results.push(<div key={results.length}>{elt}</div>);
+    }
 
     for (const event of events) {
         if (event._event === "cockpit_system_role_run_start") {
             check_mode = event.arguments.includes("--check");
             if (check_mode)
-                results.push(<div><i>{_("Drift check run")}</i></div>);
+                push(<i>{_("Drift check run")}</i>);
         } else if (event._event === "v2_playbook_on_play_start") {
             cockpit.assert(!running_task);
-            results.push(<div><b>{event.play.name}</b></div>);
+            push(<b>{event.play.name}</b>);
         } else if (event._event === "v2_playbook_on_task_start" || event._event === "v2_playbook_on_handler_task_start") {
             cockpit.assert(!running_task);
             running_task = event.task;
@@ -148,50 +150,50 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
             cockpit.assert(running_task && running_task.id === event.task.id);
             running_task = null;
             if (event.hosts.localhost.changed) {
-                results.push(<div>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</div>);
+                push(<>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</>);
                 if (event.hosts.localhost.msg)
-                    results.push(<div>- {event.hosts.localhost.msg}</div>);
+                    push(<>- {event.hosts.localhost.msg}</>);
             } else if (show_all)
-                results.push(<div>{event.task.name} {_("(no change)")}</div>);
+                push(<>{event.task.name} {_("(no change)")}</>);
         } else if (event._event === "v2_runner_on_skipped") {
             cockpit.assert(running_task && running_task.id === event.task.id);
             running_task = null;
             if (show_all)
-                results.push(<div>{event.task.name} {_("(skipped)")}</div>);
+                push(<>{event.task.name} {_("(skipped)")}</>);
         } else if (event._event === "v2_runner_on_failed") {
             cockpit.assert(running_task && running_task.id === event.task.id);
             running_task = null;
-            results.push(<div>{event.task.name} {_("FAILED")}</div>);
-            results.push(<div>- {event.hosts.localhost.msg}</div>);
+            push(<>{event.task.name} {_("FAILED")}</>);
+            push(<>- {event.hosts.localhost.msg}</>);
             if (event.hosts.localhost.results) {
                 for (const res of event.hosts.localhost.results) {
                     if (res.failed)
-                        results.push(<div>- {res.msg}</div>);
+                        push(<>- {res.msg}</>);
                 }
             }
         } else if (event._event === "v2_playbook_on_stats") {
             cockpit.assert(!running_task);
-            results.push(<br />);
+            push(<br />);
             const stats = event.stats.localhost;
             if (stats.changed !== 0) {
                 if (check_mode)
-                    results.push(<div>{cockpit.format(_("$0 tasks have reported differences between the desired and the actual state of the machine."), stats.changed)}</div>);
+                    push(cockpit.format(_("$0 tasks have reported differences between the desired and the actual state of the machine."), stats.changed));
                 else
-                    results.push(<div>{cockpit.format(_("$0 tasks have made changes."), stats.changed)}</div>);
+                    push(cockpit.format(_("$0 tasks have made changes."), stats.changed));
             }
             if (stats.failures !== 0)
-                results.push(<div>{cockpit.format(_("$0 tasks have failed."), stats.failures)}</div>);
+                push(cockpit.format(_("$0 tasks have failed."), stats.failures));
             if (stats.changed === 0 && stats.failures === 0) {
                 if (check_mode)
-                    results.push(<div>{_("The machine is in the desired state.")}</div>);
+                    push(_("The machine is in the desired state."));
                 else
-                    results.push(<div>{_("Nothing interesting has happened.")}</div>);
+                    push(_("Nothing interesting has happened."));
             }
         }
     }
 
     if (running_task)
-        results.push(<div>{running_task.name} <Spinner isInline /></div>);
+        push(<>{running_task.name} <Spinner isInline /></>);
 
     return results;
 }
@@ -272,15 +274,12 @@ export const PlaybookRunner = ({
     else if (process.state === ProcessState.STOPPED)
         actions = (
             <>
-                {_("Idle")}
-                {"\n"}
                 <Button
                     onClick={() => run(false)}
                     variant="danger"
                 >
                     {_("Run")}
                 </Button>
-                {"\n"}
                 <Button
                     onClick={() => run(true)}
                     variant="secondary"
@@ -310,15 +309,14 @@ export const PlaybookRunner = ({
             <CardBody>
                 {output && !(output instanceof Error) && render_ansible_events(output, showAll)}
                 <br />
+            </CardBody>
+            <CardHeader actions={{actions}}>
                 <Switch
                     label={_("Show all execution steps")}
                     isChecked={showAll}
                     onChange={(_event, val) => setShowAll(val)}
                 />
-            </CardBody>
-            <CardBody>
-                {actions}
-            </CardBody>
+            </CardHeader>
         </Card>
     );
 };

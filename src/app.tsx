@@ -285,7 +285,7 @@ export const Application = () => {
                 <PageSection hasBodyWrapper={false} isFilled hasOverflowScroll>
                     <MainSection config={config} roles={roles} />
                 </PageSection>
-                <PageSection hasBodyWrapper={false}>
+                <PageSection hasBodyWrapper={false} hasOverflowScroll>
                     { superuser.allowed && config instanceof AppConfig && <PlaybookRunner config={config} /> }
                 </PageSection>
             </Page>
