@@ -11,17 +11,19 @@ import { superuser } from "superuser";
 
 import { Page, PageSection } from '@patternfly/react-core/dist/esm/components/Page';
 import { Card, CardHeader, CardTitle } from '@patternfly/react-core/dist/esm/components/Card';
-import { Table, Tbody, Tr, Td, ExpandableRowContent } from '@patternfly/react-table';
+import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
-import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
-import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
+import { Button } from '@patternfly/react-core/dist/esm/components/Button';
+import { RhUiTrashIcon } from '@patternfly/react-icons';
+import { Modal, ModalBody, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Remarkable } from "remarkable";
 
-import { ToastArea, toaster } from "./toaster";
-import { useAppConfig, AppConfig, RoleConfig } from "./config";
-import { useSystemRoles, SystemRole, SystemRoles, AddRoleDialog } from "./discover";
+import { ExternalLinkButton, ExpandableTr } from "./utils";
+import { ToastArea } from "./toaster";
+import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role } from "./config";
+import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
 import { PlaybookRunner } from "./run";
 import { EditVariable } from "./edit";
 
@@ -29,16 +31,42 @@ const _ = cockpit.gettext;
 
 superuser.reload_page_on_change();
 
-const ExternalLinkButton = (props : ButtonProps) => (
-    <Button
-        component="a"
-        icon={<RhUiExternalLinkIcon />}
-        iconPosition="right"
-        rel="noopener noreferrer"
-        target="_blank"
-        {...props}
-    />
-);
+const VarRow = ({
+    config,
+    role,
+    name,
+    spec,
+} : {
+    config: AppConfig,
+    role: RoleConfig,
+    name: string,
+    spec: Option,
+}) => {
+    const remarkable = new Remarkable();
+
+    return (
+        <Tr key={name}>
+            <Td modifier="fitContent">{name}</Td>
+            <Td
+                width={30}
+                dangerouslySetInnerHTML={
+                    {
+                        __html: remarkable.render(spec.description || "")
+                    }
+                }
+            />
+            <Td modifier="fitContent">{spec.type}</Td>
+            <Td>
+                <EditVariable
+                    config={config}
+                    role={role}
+                    name={name}
+                    spec={spec}
+                />
+            </Td>
+        </Tr>
+    );
+}
 
 const RoleRow = ({
     config,
@@ -51,96 +79,106 @@ const RoleRow = ({
     system_role: SystemRole,
     rowIndex: number,
 }) => {
-    const [expanded, setExpanded] = useState<boolean>(false);
-
-    function remove_role() {
-        try {
-            config.modify(
-                conf => {
-                    return {
-                        ...conf,
-                        roles: conf.roles.filter(r => !Object.is(r, role))
-                    };
+    const expandableContent = (
+        <Table>
+            <Tbody>
+                {
+                    Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).map(
+                        ([name, spec]) => {
+                            return (
+                                <VarRow
+                                    key={name}
+                                    config={config}
+                                    role={role}
+                                    name={name}
+                                    spec={spec}
+                                />
+                            );
+                        }
+                    )
                 }
-            );
-        } catch (ex) {
-            toaster.add_error(_("Failed to remove role"), ex);
-        }
-    }
-
-    const remarkable = new Remarkable();
+            </Tbody>
+        </Table>
+    );
 
     return (
-        <Tbody isExpanded={expanded}>
-            <Tr>
-                <Td
-                    expand={
-                        {
-                            rowIndex,
-                            isExpanded: expanded,
-                            onToggle: () => {
-                                setExpanded(!expanded);
-                            }
-                        }
-                    }
+        <ExpandableTr
+            rowIndex={rowIndex}
+            expandableContent={expandableContent}
+        >
+            <Td>{role.name}</Td>
+            <Td>{system_role.meta?.galaxy_info?.description}</Td>
+            <Td>
+                <ExternalLinkButton
+                    href={"https://linux-system-roles.github.io/" + role.name}
+                    variant="link"
+                >
+                    {_("Documentation")}
+                </ExternalLinkButton>
+            </Td>
+            <Td modifier="fitContent" hasAction>
+                <Button
+                    onClick={() => remove_role(config, role.name)}
+                    icon={<RhUiTrashIcon />}
+                    variant="plain"
                 />
-                <Td>{role.name}</Td>
-                <Td>{system_role.meta?.galaxy_info?.description}</Td>
-                <Td>
-                    <ExternalLinkButton
-                        href={"https://linux-system-roles.github.io/" + role.name}
-                        variant="link"
-                    >
-                        {_("Documentation")}
-                    </ExternalLinkButton>
-                </Td>
-                <Td modifier="fitContent" hasAction>
-                    <Button
-                        onClick={remove_role}
-                        icon={<RhUiTrashIcon />}
-                        variant="plain"
-                    />
-                </Td>
-            </Tr>
-            <Tr isExpanded={expanded}>
-                <Td colSpan={5}>
-                    <ExpandableRowContent>
-                        <Table>
-                            <Tbody>
-                                {
-                                    Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).map(
-                                        ([name, sys_v]) => {
-                                            return (
-                                                <Tr key={name}>
-                                                    <Td modifier="fitContent">{name}</Td>
-                                                    <Td
-                                                        width={30}
-                                                        dangerouslySetInnerHTML={
-                                                            {
-                                                                __html: remarkable.render(sys_v.description || "")
-                                                            }
-                                                        }
-                                                    />
-                                                    <Td modifier="fitContent">{sys_v.type}</Td>
-                                                    <Td>
-                                                        <EditVariable
-                                                            config={config}
-                                                            role={role}
-                                                            name={name}
-                                                            spec={sys_v}
-                                                        />
-                                                    </Td>
-                                                </Tr>
-                                            );
-                                        }
-                                    )
+            </Td>
+        </ExpandableTr>
+    );
+};
+
+
+const AddRoleDialog = ({
+    config,
+    roles
+} : {
+    config: AppConfig,
+    roles: SystemRoles,
+}) => {
+    const Dialogs = useDialogs();
+
+    const body = (
+        <Table>
+            <Tbody>
+                {
+                    Object.values(roles)
+                            .filter(r => r.arguments?.argument_specs?.main?.options)
+                            .map(
+                                r => {
+                                    return (
+                                        <Tr
+                                            key={r.name}
+                                            isClickable
+                                            onRowClick={
+                                                async () => {
+                                                    await add_role(config, r.name);
+                                                    Dialogs.close();
+                                                }
+                                            }
+                                        >
+                                            <Td>{r.name}</Td>
+                                            <Td>{r.meta?.galaxy_info?.description}</Td>
+                                        </Tr>
+                                    );
                                 }
-                            </Tbody>
-                        </Table>
-                    </ExpandableRowContent>
-                </Td>
-            </Tr>
-        </Tbody>
+                            )
+                }
+            </Tbody>
+        </Table>
+    );
+
+    return (
+        <Modal
+            isOpen
+            variant="medium"
+            position="top"
+            onClose={Dialogs.close}
+        >
+            <ModalHeader title="Add System Role" />
+            <ModalBody>
+                { body }
+            </ModalBody>
+        </Modal>
     );
 };
 
