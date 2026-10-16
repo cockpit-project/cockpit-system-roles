@@ -5,114 +5,54 @@
  */
 
 import cockpit from 'cockpit';
-import React, { useState, useEffect, useRef } from 'react';
-import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
+import React from 'react';
 import { Checkbox } from '@patternfly/react-core/dist/esm/components/Checkbox';
 import { SimpleSelect } from 'cockpit-components-simple-select';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
-import { FileChooserInput } from 'cockpit/react/FileChooser';
 
-import { toaster } from "./toaster";
-import { AppConfig, RoleConfig, VarConfig } from "./config";
-import { Option } from "./discover";
+import { DebouncedTextInput, DebouncedFileChooserInput } from "./utils";
+import { AppConfig, RoleConfig, update_variable } from "./config";
+import { Option } from "./roles";
 
 const _ = cockpit.gettext;
 
-/* Defaults:
+/* EDITING VARIABLES
 
-   - config stores variable values in JSON form
+   We use different UIs for different types of variables.  A dropdown
+   for strings with a limited set of choices and an on/off switch for
+   booleans, for example.  If we don't have a specific UI for a type,
+   we let the user edit the JSON representation in a text input.
 
-   - empty string means, not set in playbook
+   When the user edits raw JSON, leaving the text input empty means
+   that the variable will not be included in the playbook at all.  If
+   it is not empty, it must be valid JSON.  If it is not valid JSON,
+   we can not construct the playbook at all (since the playbook itself
+   wouldn't be valid JSON then), so we catch and point that out in the
+   UI.
 
-   - if there is a default, the Ui translates between unset vars and
-     that default both ways
+   If there is a default for a JSON text input, it is shown as a
+   placeholder.
 
-   - if there is no default, there is a checkbox for explicitly
-     putting a var into the playbook. it is off when var is unset,
-     when checking it, a reasonable value is put into the var, like
-     the empty string, the number zero, the first choice, false.
+   When we _do_ have a specific UI for a type, defaults are handled
+   differently.
 
-   - for "raw" (and "int"), the user might empty out the text
-     input. Inthat case we shouldn't change that to the default, and
-     thus fight the user.  Instead, the default is shown as a
-     placeholder when the input is empty.
+   If we know the default value, the UI will make it look as if the
+   variable always has a value, even if it is actually omitted from
+   the playbook.  If the variable is omitted, we show it with its
+   default value instead, and if the user edits it and makes it equal
+   to the default value, we will omit it from the playbook.
+
+   If we don't know the default value, we have to let the user
+   explicitly specify whether or not the variable should be in the
+   playbook.  This is done with an additional, ugly, checkbox.
+
+
+   Note that there is no specific UI for "int" and "float" types.  If
+   the UI for them would be a text input, it would behave identical to
+   raw JSON.  We do additional validation, however, also for "dict"
+   and "list".
  */
-
-const DebouncedTextInput = ({
-    value,
-    onChange,
-    placeholder,
-} : {
-    value: string,
-    onChange: (val: string) => void,
-    placeholder?: string,
-}) => {
-    const [localValue, setLocalValue] = useState<string>(value);
-    const timer = useRef<number>(0);
-
-    useEffect(
-        () => {
-            setLocalValue(value);
-        },
-        [value],
-    );
-
-    return (
-        <TextInput
-            value={localValue}
-            onChange={
-                (_event, val) => {
-                    setLocalValue(val);
-                    if (timer.current)
-                        window.clearTimeout(timer.current);
-                    timer.current = window.setTimeout(
-                        () => {
-                            timer.current = 0;
-                            onChange(val);
-                        },
-                        500);
-                }
-            }
-            {...placeholder ? { placeholder } : {}}
-        />
-    );
-};
-
-async function update_variable(config: AppConfig, role: RoleConfig, name: string, value: string) {
-    function update_vars(vars: Record<string, VarConfig>) {
-        if (value !== "")
-            return {
-                ...vars,
-                [name]: { ...vars[name], value }
-            };
-        else {
-            const new_vars = { ...vars };
-            delete new_vars[name];
-            return new_vars;
-        }
-    }
-
-    function update_role(r: RoleConfig) {
-        if (Object.is(r, role))
-            return { ...r, vars: update_vars(r.vars) };
-        else
-            return r;
-    }
-
-    try {
-        await config.modify(
-            conf => {
-                return {
-                    ...conf,
-                    roles: conf.roles.map(update_role)
-                };
-            }
-        );
-    } catch (ex) {
-        toaster.add_error(_("Failed to update the configuration"), ex);
-    }
-}
 
 const EditRaw = ({
     value,
@@ -188,35 +128,10 @@ const EditPath = ({
     value: string,
     update: (val: string) => void,
 }) => {
-    const [localValue, setLocalValue] = useState<string>(value.substring(1, value.length - 1));
-    const timer = useRef<number>(0);
-
-    useEffect(
-        () => {
-            setLocalValue(value.substring(1, value.length - 1));
-        },
-        [value],
-    );
-
     return (
-        <FileChooserInput
-            value={localValue}
-            onChange={
-                (val, fromDialog) => {
-                    setLocalValue(val);
-                    if (timer.current)
-                        window.clearTimeout(timer.current);
-                    if (!fromDialog) {
-                        timer.current = window.setTimeout(
-                            () => {
-                                timer.current = 0;
-                                update('"' + val + '"');
-                            },
-                            500);
-                    } else
-                        update('"' + val + '"');
-                }
-            }
+        <DebouncedFileChooserInput
+            value={value.substring(1, value.length - 1)}
+            onChange={val => update('"' + val + '"')}
             fileChooserProps={
                 {
                     title: _("Select something"),
@@ -227,25 +142,33 @@ const EditPath = ({
     );
 };
 
+const specific_ui_types = ["str", "bool", "path"];
+
 function validate_value(value: string, spec: Option) {
     if (value === "")
         return;
-    if (spec.type === "raw") {
-        try {
-            JSON.parse(value);
-        } catch {
-            return _("Must be valid JSON");
-        }
-    }
-    if (spec.type === "int") {
+
+    if (specific_ui_types.includes(spec.type || "str")) {
+        // No extra validation done yet.
+        return;
+    } else {
+        // Must be JSON.
         let val;
         try {
             val = JSON.parse(value);
         } catch {
-            return _("Must be an integer");
+            return _("Must be valid JSON");
         }
-        if (!Number.isInteger(val))
+
+        // Additional validation
+        if (spec.type == "int" && !Number.isInteger(val))
             return _("Must be an integer");
+        if (spec.type == "float" && typeof val !== "number")
+            return _("Must be a number");
+        if (spec.type == "list" && !Array.isArray(val))
+            return _("Must be a JSON array");
+        if (spec.type == "dict" && !(typeof val == "object" && !Array.isArray(val)))
+            return _("Must be a JSON object");
     }
 }
 
@@ -263,40 +186,45 @@ export const EditVariable = ({
     const conf_v = role.vars[name];
 
     let value = (conf_v && conf_v.value) ? conf_v.value : "";
+    const type = spec.type || "str";
 
     let need_checkbox = false;
     let enabled = false;
 
-    if (spec.default !== undefined) {
-        if (!value && !(spec.type === "raw" || spec.type === "int"))
-            value = JSON.stringify(spec.default);
-    } else if (spec.type !== "raw") {
-        need_checkbox = true;
-        enabled = !!value;
+    if (specific_ui_types.includes(type)) {
+        // Type-specific UI, we care about whether there is a default.
+        if (spec.default !== undefined) {
+            if (!value)
+                value = JSON.stringify(spec.default);
+        } else {
+            need_checkbox = true;
+            enabled = !!value;
+        }
     }
 
     function update(val: string) {
-        if (spec.default !== undefined && !(spec.type === "raw" || spec.type === "int") && val === JSON.stringify(spec.default))
-            val = "";
+        if (specific_ui_types.includes(type)) {
+            // XXX - use JSON.parse(val) === spec.default
+            if (spec.default !== undefined && val === JSON.stringify(spec.default))
+                val = "";
+        }
         update_variable(config, role, name, val);
     }
 
     let comp;
 
-    if (spec.type === "str" && spec.choices)
+    if (type === "str" && spec.choices)
         comp = <EditChoices value={value} update={update} choices={spec.choices} />;
-    else if (spec.type === "str")
+    else if (type === "str")
         comp = <EditStr value={value} update={update} />;
-    else if (spec.type === "bool")
+    else if (type === "bool")
         comp = <EditBool value={value} update={update} />;
-    else if (spec.type === "path")
+    else if (type === "path")
         comp = <EditPath value={value} update={update} />;
-    else if (spec.type === "int")
-        comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />;
     else
         comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />;
 
-    const error = validate_value(value, spec);
+    const error = (!need_checkbox || enabled) && validate_value(value, spec);
     let helper_text;
     if (error)
         helper_text = (
@@ -314,18 +242,17 @@ export const EditVariable = ({
                     isChecked={enabled}
                     onChange={
                         (_event, checked) => {
-                            console.log("CHECKED", checked);
                             if (checked && !enabled) {
-                                if (spec.type === "str" && spec.choices)
+                                if (type === "str" && spec.choices)
                                     update('"' + spec.choices[0] + '"');
-                                else if (spec.type === "str")
+                                else if (type === "str")
                                     update("\"\"");
-                                else if (spec.type === "bool")
+                                else if (type === "bool")
                                     update("false");
-                                else if (spec.type === "path")
+                                else if (type === "path")
                                     update("\"\"");
-                                else if (spec.type === "int")
-                                    update("0");
+                                else
+                                    update("");
                             } else if (!checked) {
                                 update("");
                             }
