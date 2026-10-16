@@ -5,7 +5,7 @@
  */
 
 import cockpit from 'cockpit';
-import React, { useState } from 'react';
+import React from 'react';
 import { useDialogs, WithDialogs } from "dialogs";
 import { superuser } from "superuser";
 
@@ -24,7 +24,7 @@ import { ExternalLinkButton, ExpandableTr } from "./utils";
 import { ToastArea } from "./toaster";
 import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
-import { PlaybookRunner } from "./run";
+import { PlaybookOutput, PlaybookRunner } from "./run";
 import { EditVariable } from "./edit";
 
 const _ = cockpit.gettext;
@@ -66,7 +66,7 @@ const VarRow = ({
             </Td>
         </Tr>
     );
-}
+};
 
 const RoleRow = ({
     config,
@@ -126,7 +126,6 @@ const RoleRow = ({
         </ExpandableTr>
     );
 };
-
 
 const AddRoleDialog = ({
     config,
@@ -266,7 +265,12 @@ const MainSection = ({
             </EmptyState>
         );
 
-    return <ConfiguredRoles config={config} roles={roles} />;
+    return (
+        <>
+            <ConfiguredRoles config={config} roles={roles} />
+            <PlaybookOutput />
+        </>
+    );
 };
 
 export const Application = () => {
@@ -286,7 +290,12 @@ export const Application = () => {
                     <MainSection config={config} roles={roles} />
                 </PageSection>
                 <PageSection hasBodyWrapper={false}>
-                    { superuser.allowed && config instanceof AppConfig && <PlaybookRunner config={config} /> }
+                    {
+                        superuser.allowed && config instanceof AppConfig &&
+                            <PlaybookRunner
+                                config={config}
+                            />
+                    }
                 </PageSection>
             </Page>
         </WithDialogs>

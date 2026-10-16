@@ -143,4 +143,4 @@ export const DebouncedFileChooserInput = ({
             fileChooserProps={fileChooserProps}
         />
     );
-}
+};
