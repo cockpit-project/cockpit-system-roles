@@ -60,7 +60,6 @@ const _ = cockpit.gettext;
    "nbde_server_firewall_zone" is stored as JSON.stringify("virt"),
    which is "\"virt\"".
 
-
    The API for accessing the stored state is a React hook for reading
    and a couple functions for updating.  There should be only one use
    of the hook in the whole application.  Updating works without
@@ -164,7 +163,7 @@ export async function update_variable(config: AppConfig, role: RoleConfig, name:
 
 export async function add_role(config: AppConfig, name: string) {
     try {
-        await config.modify(conf => ({ ...conf, roles: [...conf.roles, { name, vars: {} } ]}));
+        await config.modify(conf => ({ ...conf, roles: [...conf.roles, { name, vars: {} }] }));
     } catch (ex) {
         toaster.add_error(_("Failed to add role"), ex);
     }

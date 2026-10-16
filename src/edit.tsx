@@ -47,7 +47,6 @@ const _ = cockpit.gettext;
    explicitly specify whether or not the variable should be in the
    playbook.  This is done with an additional, ugly, checkbox.
 
-
    Note that there is no specific UI for "int" and "float" types.  If
    the UI for them would be a text input, it would behave identical to
    raw JSON.  We do additional validation, however, also for "dict"
@@ -151,25 +150,25 @@ function validate_value(value: string, spec: Option) {
     if (specific_ui_types.includes(spec.type || "str")) {
         // No extra validation done yet.
         return;
-    } else {
-        // Must be JSON.
-        let val;
-        try {
-            val = JSON.parse(value);
-        } catch {
-            return _("Must be valid JSON");
-        }
-
-        // Additional validation
-        if (spec.type == "int" && !Number.isInteger(val))
-            return _("Must be an integer");
-        if (spec.type == "float" && typeof val !== "number")
-            return _("Must be a number");
-        if (spec.type == "list" && !Array.isArray(val))
-            return _("Must be a JSON array");
-        if (spec.type == "dict" && !(typeof val == "object" && !Array.isArray(val)))
-            return _("Must be a JSON object");
     }
+
+    // Rest must be JSON.
+    let val;
+    try {
+        val = JSON.parse(value);
+    } catch {
+        return _("Must be valid JSON");
+    }
+
+    // Additional validation
+    if (spec.type === "int" && !Number.isInteger(val))
+        return _("Must be an integer");
+    if (spec.type === "float" && typeof val !== "number")
+        return _("Must be a number");
+    if (spec.type === "list" && !Array.isArray(val))
+        return _("Must be a JSON array");
+    if (spec.type === "dict" && !(typeof val === "object" && !Array.isArray(val)))
+        return _("Must be a JSON object");
 }
 
 export const EditVariable = ({

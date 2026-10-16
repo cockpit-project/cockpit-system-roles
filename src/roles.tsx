@@ -4,19 +4,10 @@
  * Copyright (C) 2026 Red Hat, Inc.
  */
 
-import cockpit from "cockpit";
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import * as python from "python";
-import { useDialogs } from "dialogs";
-
-import { Modal, ModalBody, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal';
-import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
-
-import { AppConfig, add_role } from "./config";
 
 import discover_system_roles_py from "./discover-system-roles.py";
-
-const _ = cockpit.gettext;
 
 /* SYSTEM ROLES
 
