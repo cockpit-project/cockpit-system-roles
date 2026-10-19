@@ -13,6 +13,26 @@ import { Tbody, Tr, Td, ExpandableRowContent } from '@patternfly/react-table';
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
 
+export function JSON_parse_carefully(input: string, def?: unknown): unknown {
+    try {
+        return JSON.parse(input);
+    } catch {
+        return def;
+    }
+}
+
+function same_typeof<T>(a: unknown, b: T): a is T {
+    return typeof a === typeof b;
+}
+
+export function JSON_parse_type<T>(input: string, def: T): T {
+    let v = JSON_parse_carefully(input);
+    if (same_typeof(v, def))
+        return v;
+    else
+        return def;
+}
+
 export const ExternalLinkButton = (props : ButtonProps) => (
     <Button
         component="a"

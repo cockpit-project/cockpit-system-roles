@@ -11,7 +11,7 @@ import { SimpleSelect } from 'cockpit-components-simple-select';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
 
-import { DebouncedTextInput, DebouncedFileChooserInput } from "./utils";
+import { JSON_parse_carefully, JSON_parse_type, DebouncedTextInput, DebouncedFileChooserInput } from "./utils";
 import { AppConfig, RoleConfig, update_variable } from "./config";
 import { Option } from "./roles";
 
@@ -80,8 +80,8 @@ const EditStr = ({
 }) => {
     return (
         <DebouncedTextInput
-            value={value.substring(1, value.length - 1)}
-            onChange={val => update('"' + val + '"')}
+            value={JSON_parse_type(value, "")}
+            onChange={val => update(JSON.stringify(val))}
         />
     );
 };
@@ -97,9 +97,9 @@ const EditChoices = ({
 }) => {
     return (
         <SimpleSelect<string>
-            selected={value.substring(1, value.length - 1)}
+            selected={JSON_parse_type(value, choices[0])}
             options={choices.map(c => ({ value: c, content: c }))}
-            onSelect={val => update('"' + val + '"')}
+            onSelect={val => update(JSON.stringify(val))}
         />
     );
 };
@@ -111,11 +111,12 @@ const EditBool = ({
     value: string,
     update: (val: string) => void,
 }) => {
+    const v = JSON_parse_type(value, false);
     return (
         <Switch
-            isChecked={value === "true"}
-            label={value === "true" ? _("True") : _("False")}
-            onChange={(_event, val) => update(val ? "true" : "false")}
+            isChecked={v}
+            label={v ? _("True") : _("False")}
+            onChange={(_event, val) => update(JSON.stringify(val))}
         />
     );
 };
@@ -129,8 +130,8 @@ const EditPath = ({
 }) => {
     return (
         <DebouncedFileChooserInput
-            value={value.substring(1, value.length - 1)}
-            onChange={val => update('"' + val + '"')}
+            value={JSON_parse_type(value, "")}
+            onChange={val => update(JSON.stringify(val))}
             fileChooserProps={
                 {
                     title: _("Select something"),
@@ -203,8 +204,7 @@ export const EditVariable = ({
 
     function update(val: string) {
         if (specific_ui_types.includes(type)) {
-            // XXX - use JSON.parse(val) === spec.default
-            if (spec.default !== undefined && val === JSON.stringify(spec.default))
+            if (spec.default !== undefined && JSON_parse_carefully(val) === spec.default)
                 val = "";
         }
         update_variable(config, role, name, val);
