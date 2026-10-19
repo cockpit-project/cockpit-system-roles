@@ -37,21 +37,78 @@ const _ = cockpit.gettext;
    When we _do_ have a specific UI for a type, defaults are handled
    differently.
 
-   If we know the default value, the UI will make it look as if the
-   variable always has a value, even if it is actually omitted from
-   the playbook.  If the variable is omitted, we show it with its
-   default value instead, and if the user edits it and makes it equal
-   to the default value, we will omit it from the playbook.
+   If we know the default value (see below), the UI will make it look
+   as if the variable always has a value, even if it is actually
+   omitted from the playbook.  If the variable is omitted, we show it
+   with its default value instead, and if the user edits it and makes
+   it equal to the default value, we will omit it from the playbook.
 
    If we don't know the default value, we have to let the user
    explicitly specify whether or not the variable should be in the
    playbook.  This is done with an additional, ugly, checkbox.
 
-   Note that there is no specific UI for "int" and "float" types.  If
-   the UI for them would be a text input, it would behave identical to
-   raw JSON.  We do additional validation, however, also for "dict"
-   and "list".
+   Note that there is no specific UI for "int" and "float" types.  We
+   want to use a text input for them, and that text input then behaves
+   identical to raw JSON.  We do additional validation, however, also
+   for "dict" and "list".
  */
+
+/* A bit about how values travel through Ansible, especially "null"
+
+   The value for a variable
+
+   - is specified in a playbook (or not)
+   - then it passes through argument validation without being changed,
+   - then it might get a default value from defaults/*.yml,
+   - and then it is used in some way by the role tasks.
+
+   Generally, there is a difference between not specifying a variable
+   and giving it the value "null", but it is complicated in practice.
+
+   The argument validation step will not run for variables that have
+   not been specified.  When a variable has value "null", this step
+   runs and rejects that value for types like "bool" and "int", but
+   allows it for type "str", since anything can be converted to a
+   string.  This conversion is only done for checking, however. The
+   next steps will still see "null".
+
+   The default values in defaults/*.yml are used only when a variable
+   is explicitly unspecified.  If it has been explicitly set to "null"
+   in the playbook, any default for it in defaults/*.yml will be
+   ignored, and it will arrive as "null" at the task.
+
+   Note that defaults/*.yml can specify a default value that would not
+   pass argument validation, and that will not be caught since
+   argument validation runs before default substitution. We don't need
+   to worry about that, and maybe some riles even use that as a
+   feature.
+
+   How a task reacts to unset vs "null" variables is probably up to
+   the task.  When a unset variable is used during {{ }}
+   interpolation, that's an error.
+
+   When you use a variable of type "str" with a "| string" conversion
+   in an interpolation and then give it the value "null" in the
+   playbook, it will pass validation and be substituted as the string
+   "None" in the interpolation template.
+
+   Many system roles have variables of type "str" and a default of
+   "null".  The default is both declared in argument_specs, and in
+   defaults/main.yml.  Thus, the tasks of the role must treat a unset
+   variable and one with the value "null" identically, and the "null"
+   default means "no default value" in practice.  Or in other words,
+   the behavior of the role when the variable is unset can not be
+   achieved with any specific value for this variable.
+
+   The following function encodes this to implement the predicate "do
+   we know the default value".
+ */
+
+function has_default(spec: Option) {
+    // "default: null" means "no default" for type "str" and is likely
+    // an error for any other type except "raw".
+    return spec.default !== undefined && (spec.type == "raw" || spec.default != null);
+}
 
 const EditRaw = ({
     value,
@@ -193,7 +250,7 @@ export const EditVariable = ({
 
     if (specific_ui_types.includes(type)) {
         // Type-specific UI, we care about whether there is a default.
-        if (spec.default !== undefined) {
+        if (has_default(spec)) {
             if (!value)
                 value = JSON.stringify(spec.default);
         } else {
@@ -204,7 +261,7 @@ export const EditVariable = ({
 
     function update(val: string) {
         if (specific_ui_types.includes(type)) {
-            if (spec.default !== undefined && JSON_parse_carefully(val) === spec.default)
+            if (has_default(spec) && JSON_parse_carefully(val) === spec.default)
                 val = "";
         }
         update_variable(config, role, name, val);
@@ -221,7 +278,7 @@ export const EditVariable = ({
     else if (type === "path")
         comp = <EditPath value={value} update={update} />;
     else
-        comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />;
+        comp = <EditRaw value={value} placeholder={has_default(spec) ? JSON.stringify(spec.default) : ""} update={update} />;
 
     const error = (!need_checkbox || enabled) && validate_value(value, spec);
     let helper_text;
