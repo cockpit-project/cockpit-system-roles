@@ -4,6 +4,7 @@ set -euf
 
 dir=/run/cockpit/system-roles
 
+umask 077
 mkdir -p "$dir"
 cat >"$dir/playbook.json"
 
