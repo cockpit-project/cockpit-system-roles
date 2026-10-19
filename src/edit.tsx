@@ -168,7 +168,7 @@ function validate_value(value: string, spec: Option) {
         return _("Must be a number");
     if (spec.type === "list" && !Array.isArray(val))
         return _("Must be a JSON array");
-    if (spec.type === "dict" && !(typeof val === "object" && !Array.isArray(val)))
+    if (spec.type === "dict" && !(val && typeof val === "object" && !Array.isArray(val)))
         return _("Must be a JSON object");
 }
 
