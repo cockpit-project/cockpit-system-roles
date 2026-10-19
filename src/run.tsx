@@ -96,8 +96,7 @@ type AnsibleEvent = AnsibleEvent_CockpitRunStart | AnsibleEvent_PlayStart | Ansi
 
 const JSONL = {
     parse: (val: string) => {
-        return val.split("\n").filter(l => !!l)
-                .map(l => JSON.parse(l));
+        return val.split("\n").slice(0, -1).map(l => JSON.parse(l));
     }
 };
 
