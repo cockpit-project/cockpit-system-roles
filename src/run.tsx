@@ -275,7 +275,7 @@ export const PlaybookRunner = ({
             await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
             if (process.state === ProcessState.FAILED)
                 process.reset();
-            process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : [])], {});
+            await process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : [])], {});
         } catch (ex) {
             toaster.add_error(_("Failed to start the playbook"), ex);
         }
