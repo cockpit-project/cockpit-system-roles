@@ -13,6 +13,13 @@ import { Tbody, Tr, Td, ExpandableRowContent } from '@patternfly/react-table';
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
 
+export function shortenstart(prefix: string, val: string): string {
+    if (val.startsWith(prefix))
+        return val.substring(prefix.length);
+    else
+        return val;
+}
+
 export function JSON_parse_carefully(input: string, def?: unknown): unknown {
     try {
         return JSON.parse(input);

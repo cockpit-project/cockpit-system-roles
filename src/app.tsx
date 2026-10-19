@@ -20,7 +20,7 @@ import { RhUiTrashIcon } from '@patternfly/react-icons';
 import { Modal, ModalBody, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Remarkable } from "remarkable";
 
-import { ExternalLinkButton, ExpandableTr } from "./utils";
+import { shortenstart, ExternalLinkButton, ExpandableTr } from "./utils";
 import { ToastArea } from "./toaster";
 import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
@@ -110,7 +110,7 @@ const RoleRow = ({
             <Td>{system_role.meta?.galaxy_info?.description}</Td>
             <Td>
                 <ExternalLinkButton
-                    href={"https://linux-system-roles.github.io/" + role.name}
+                    href={"https://linux-system-roles.github.io/" + shortenstart("linux-system-roles.", role.name)}
                     variant="link"
                 >
                     {_("Documentation")}
