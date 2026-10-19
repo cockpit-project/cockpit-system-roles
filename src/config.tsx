@@ -4,8 +4,9 @@
  * Copyright (C) 2026 Red Hat, Inc.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useReducer } from "react";
 import cockpit from "cockpit";
+import { useInit } from "hooks";
 
 import { toaster } from "./toaster";
 
@@ -85,19 +86,27 @@ export class AppConfig {
 
     config: Config;
 
-    constructor (file: cockpit.FileHandle<unknown>, data: unknown, tag: string) {
+    constructor(file: cockpit.FileHandle<unknown>, data: unknown, tag: string) {
+        this.#file = file;
+        this.#tag = tag;
+        this.config = data as Config;
+    }
+
+    _set(file: cockpit.FileHandle<unknown>, data: unknown, tag: string) {
         this.#file = file;
         this.#tag = tag;
         this.config = data as Config;
     }
 
     async modify(func: (old: Config) => Config) {
+        cockpit.assert(this.#file && this.config);
         await this.#file.replace(func(this.config), this.#tag);
     }
 }
 
 export const useAppConfig = () => {
     const [config, setConfig] = useState<AppConfig | Error | null>(null);
+    const [, forceUpdate] = useReducer(x => x + 1, 0);
 
     useEffect(
         () => {
@@ -112,10 +121,18 @@ export const useAppConfig = () => {
                         setConfig(new Error(error.message));
                     else {
                         cockpit.assert(tag);
-                        if (data)
-                            setConfig(new AppConfig(file, data, tag));
-                        else
-                            setConfig(new AppConfig(file, { roles: [] }, tag));
+                        if (!data)
+                            data = { roles: [] };
+
+                        setConfig(config => {
+                            if (config instanceof AppConfig) {
+                                config._set(file, data, tag);
+                                forceUpdate();
+                                return config;
+                            } else {
+                                return new AppConfig(file, data, tag);
+                            }
+                        });
                     }
                 }
             );
