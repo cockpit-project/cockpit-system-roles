@@ -241,8 +241,12 @@ export const PlaybookRunner = ({
                     previousState.current = pr.state;
 
                     if (pr.state === ProcessState.FAILED && prev !== ProcessState.FAILED) {
-                        const err = await cockpit.file("/run/cockpit/system-roles/run.err").read();
-                        toaster.add(_("Playbook execution failed"), err);
+                        try {
+                            const err = await cockpit.file("/run/cockpit/system-roles/run.err", { superuser: "require" }).read();
+                            toaster.add(_("Playbook execution failed"), err);
+                        } catch (ex) {
+                            toaster.add(_("Playbook execution failed"), cockpit.format(_("Can't access errror: $0"), String(ex)));
+                        }
                         pr.reset();
                     }
                 }
