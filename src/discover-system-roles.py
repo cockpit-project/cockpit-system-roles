@@ -19,11 +19,16 @@ def read_yaml (path):
         return None
 
 def import_system_role (path):
-    return {
+    res = {
         "name": os.path.basename(path),
-        "meta": read_yaml(os.path.join(path, "meta", "main.yml")),
-        "arguments": read_yaml(os.path.join(path, "meta", "argument_specs.yml")),
     }
+    meta = read_yaml(os.path.join(path, "meta", "main.yml"))
+    if meta:
+        res["meta"] = meta
+    arguments = read_yaml(os.path.join(path, "meta", "argument_specs.yml"))
+    if arguments:
+        res["arguments"] = arguments
+    return res
 
 roles = [ import_system_role(path) for path in glob.glob("/usr/share/ansible/roles/linux-system-roles.*") ]
 
