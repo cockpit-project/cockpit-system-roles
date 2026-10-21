@@ -18,7 +18,7 @@ import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyStat
 import { Button } from '@patternfly/react-core/dist/esm/components/Button';
 import { RhUiTrashIcon } from '@patternfly/react-icons';
 import { Modal, ModalBody, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal';
-import { Remarkable } from "remarkable";
+import Markdown from "markdown-to-jsx";
 
 import { shortenstart, ExternalLinkButton, ExpandableTr } from "./utils";
 import { ToastArea } from "./toaster";
@@ -31,6 +31,44 @@ const _ = cockpit.gettext;
 
 superuser.reload_page_on_change();
 
+const Description = ({
+    children
+} : {
+    children: string | string[] | undefined
+}) => {
+    const options = {
+        overrides: {
+            a: {
+                props: {
+                    rel: "noopener noreferrer",
+                    target: "_blank",
+                },
+            },
+            // XXX - PatternFly messes with CSS so that for example
+            // <ul> doesn't get bullets. We probably need to configure
+            // Markdown to use PF text markup instead the standard
+            // HTML one. Trying to undo PF CSS changes is the wrong
+            // approach.
+            ul: {
+                props: {
+                    style: { "list-style": "inside" },
+                }
+            }
+        },
+    };
+
+    if (children) {
+        return (
+            <Markdown options={options}>
+                { Array.isArray(children)
+                    ? children.join("\n\n")
+                    : children
+                }
+            </Markdown>
+        );
+    }
+}
+
 const VarRow = ({
     config,
     role,
@@ -42,19 +80,12 @@ const VarRow = ({
     name: string,
     spec: Option,
 }) => {
-    const remarkable = new Remarkable();
-
     return (
         <Tr key={name}>
             <Td modifier="fitContent">{name}</Td>
-            <Td
-                width={30}
-                dangerouslySetInnerHTML={
-                    {
-                        __html: remarkable.render(spec.description || "")
-                    }
-                }
-            />
+            <Td width={30}>
+                <Description>{spec.description}</Description>
+            </Td>
             <Td modifier="fitContent">{spec.type}</Td>
             <Td>
                 <EditVariable
