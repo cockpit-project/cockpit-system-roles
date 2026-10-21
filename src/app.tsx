@@ -141,10 +141,10 @@ const RoleRow = ({
             <Td>{system_role.meta?.galaxy_info?.description}</Td>
             <Td>
                 <ExternalLinkButton
-                    href={"https://linux-system-roles.github.io/" + shortenstart("linux-system-roles.", role.name)}
+                    href={`https://galaxy.ansible.com/ui/standalone/roles/linux-system-roles/${shortenstart("linux-system-roles.", role.name)}/documentation/`}
                     variant="link"
                 >
-                    {_("Documentation")}
+                    {_("Read more on Ansible Galaxy")}
                 </ExternalLinkButton>
             </Td>
             <Td modifier="fitContent" hasAction>
