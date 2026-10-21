@@ -62,12 +62,11 @@ const Description = ({
             <Markdown options={options}>
                 { Array.isArray(children)
                     ? children.join("\n\n")
-                    : children
-                }
+                    : children}
             </Markdown>
         );
     }
-}
+};
 
 const VarRow = ({
     config,

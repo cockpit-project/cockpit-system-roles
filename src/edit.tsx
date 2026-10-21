@@ -107,7 +107,7 @@ const _ = cockpit.gettext;
 function has_default(spec: Option) {
     // "default: null" means "no default" for type "str" and is likely
     // an error for any other type except "raw".
-    return spec.default !== undefined && (spec.type == "raw" || spec.default != null);
+    return spec.default !== undefined && (spec.type === "raw" || spec.default !== null);
 }
 
 const EditRaw = ({

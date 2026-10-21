@@ -89,7 +89,7 @@ function import_Meta(val: JsonValue): Meta {
     const obj = import_json_object(val);
     return {
         galaxy_info: get_optional(obj, "galaxy_info", import_GalaxyInfo),
-    }
+    };
 }
 
 function import_Option(val: JsonValue): Option {
@@ -99,7 +99,7 @@ function import_Option(val: JsonValue): Option {
         description: get_optional(obj, "description", import_string_or_string_array),
         default: get_optional(obj, "default", v => v),
         choices: get_optional(obj, "choices", v => import_array(v, import_string)),
-    }
+    };
 }
 
 function import_ArgumentSpecs(val: JsonValue): ArgumentSpecs {
@@ -113,7 +113,7 @@ function import_Arguments(val: JsonValue): Arguments {
     const obj = import_json_object(val);
     return {
         argument_specs: get_optional(obj, "argument_specs", v => import_record(v, import_ArgumentSpecs)),
-    }
+    };
 }
 
 function import_SystemRole(val: JsonValue): SystemRole {
@@ -147,7 +147,7 @@ export const useSystemRoles = () => {
             async function doit() {
                 try {
                     const result = await discover_system_roles();
-                    const roles = result.roles.map(r => validate(r.name, r, import_SystemRole, null))
+                    const roles = result.roles.map(r => validate(r.name, r, import_SystemRole, null));
                     setRoles(Object.fromEntries(roles.filter(r => !!r).map(r => [r.name, r])));
                 } catch (ex) {
                     setRoles(new Error(String(ex)));

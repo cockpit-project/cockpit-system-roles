@@ -33,7 +33,7 @@ function same_typeof<T>(a: unknown, b: T): a is T {
 }
 
 export function JSON_parse_type<T>(input: string, def: T): T {
-    let v = JSON_parse_carefully(input);
+    const v = JSON_parse_carefully(input);
     if (same_typeof(v, def))
         return v;
     else

@@ -6,7 +6,6 @@
 
 import { useState, useEffect, useReducer } from "react";
 import cockpit from "cockpit";
-import { useInit } from "hooks";
 
 import { toaster } from "./toaster";
 
