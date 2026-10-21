@@ -160,10 +160,12 @@ const RoleRow = ({
 
 const AddRoleDialog = ({
     config,
-    roles
+    roles,
+    filter,
 } : {
     config: AppConfig,
     roles: SystemRoles,
+    filter: (role: SystemRole) => boolean,
 }) => {
     const Dialogs = useDialogs();
 
@@ -173,6 +175,7 @@ const AddRoleDialog = ({
                 {
                     Object.values(roles)
                             .filter(r => r.arguments?.argument_specs?.main?.options)
+                            .filter(filter)
                             .map(
                                 r => {
                                     return (
@@ -222,7 +225,13 @@ const ConfiguredRoles = ({
     const Dialogs = useDialogs();
 
     function add_role() {
-        Dialogs.show(<AddRoleDialog config={config} roles={roles} />);
+        const config_roles = config.config.roles.map(r => r.name);
+        Dialogs.show(
+            <AddRoleDialog
+                config={config}
+                roles={roles}
+                filter={role => !config_roles.includes(role.name)}
+            />);
     }
 
     const actions = (
