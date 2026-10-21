@@ -9,7 +9,9 @@ import cockpit from "cockpit";
 
 export interface VarConfig {
     name: string;
-    value: string;
+    value: string;  // Always JSON, but maybe not valid
+    description: string | null;
+    type: string | null;
 }
 
 export interface RoleConfig {

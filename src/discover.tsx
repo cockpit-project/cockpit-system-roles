@@ -22,7 +22,7 @@ import discover_system_roles_py from "./discover-system-roles.py";
 
 const _ = cockpit.gettext;
 
-interface Option {
+export interface Option {
     type: string,
     description: string,
     default?: string,
@@ -63,12 +63,14 @@ export const AddRoleDialog = ({ config } : { config: AppConfig }) => {
 
     async function add_role(role: SystemRole) {
         try {
+            const options = role.arguments?.main?.options;
+            cockpit.assert(options);
             const role_config: RoleConfig = {
                 name: role.name,
                 full_name: basename(role.path),
                 description: role.description || "",
-                vars: Object.keys(role.arguments.main.options).map(o => ({ name: o, value: "" }))
-            }
+                vars: Object.keys(options).map(o => ({ name: o, value: "", description: options[o].description || null, type: options[o].type || null }))
+            };
             await config.modify(conf => ({ ...conf, roles: [ ...conf.roles, role_config ] }));
             Dialogs.close();
         } catch (ex) {
@@ -85,18 +87,20 @@ export const AddRoleDialog = ({ config } : { config: AppConfig }) => {
             <Table>
                 <Tbody>
                     {
-                        roles.map(
-                            r => (
-                                <Tr
-                                    key={r.path}
-                                    isClickable
-                                    onRowClick={() => add_role(r)}
-                                >
-                                    <Td>{r.name}</Td>
-                                    <Td>{r.description}</Td>
-                                </Tr>
+                        roles
+                            .filter(r => r.arguments?.main?.options)
+                            .map(
+                                r => (
+                                    <Tr
+                                        key={r.path}
+                                        isClickable
+                                        onRowClick={() => add_role(r)}
+                                    >
+                                        <Td>{r.name}</Td>
+                                        <Td>{r.description}</Td>
+                                    </Tr>
+                                )
                             )
-                        )
                     }
                 </Tbody>
             </Table>

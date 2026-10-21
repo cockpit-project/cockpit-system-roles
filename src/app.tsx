@@ -17,6 +17,7 @@ import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyStat
 import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
 import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
+import { Remarkable } from "remarkable";
 
 const _ = cockpit.gettext;
 
@@ -132,6 +133,14 @@ const RoleRow = ({
         }
     }
 
+    function shorten(name: string): string {
+        if (name.startsWith(role.name + "_"))
+            return name.substring(role.name.length + 1);
+        return name;
+    }
+
+    const remarkable = new Remarkable();
+
     return (
         <Tbody isExpanded={expanded}>
             <Tr>
@@ -173,7 +182,16 @@ const RoleRow = ({
                                     role.vars.map(
                                         v => (
                                             <Tr key={v.name}>
-                                                <Td>{v.name}</Td>
+                                                <Td modifier="fitContent">{shorten(v.name)}</Td>
+                                                <Td
+                                                    width={30}
+                                                    dangerouslySetInnerHTML={
+                                                        {
+                                                            __html: remarkable.render(v.description)
+                                                        }
+                                                    }
+                                                />
+                                                <Td modifier="fitContent">{v.type}</Td>
                                                 <Td>
                                                     <DebouncedTextInput
                                                         value={v.value}
