@@ -9,7 +9,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
 import { RhUiExternalLinkIcon } from '@patternfly/react-icons';
-import { Tbody, Tr, Td, ExpandableRowContent } from '@patternfly/react-table';
+import { Tbody, Tr, TrProps, Td, ExpandableRowContent } from '@patternfly/react-table';
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
 
@@ -55,16 +55,17 @@ export const ExpandableTr = ({
     rowIndex,
     expandableContent,
     children,
+    ...props
 } : {
     rowIndex: number,
     expandableContent: React.ReactNode,
     children: React.ReactNode[],
-}) => {
+} & Omit<TrProps, "children">) => {
     const [expanded, setExpanded] = useState<boolean>(false);
 
     return (
         <Tbody isExpanded={expanded}>
-            <Tr>
+            <Tr {...props}>
                 <Td
                     expand={
                         {

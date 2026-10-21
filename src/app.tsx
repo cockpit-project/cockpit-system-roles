@@ -81,7 +81,7 @@ const VarRow = ({
     spec: Option,
 }) => {
     return (
-        <Tr key={name}>
+        <Tr data-var={name}>
             <Td modifier="fitContent">{name}</Td>
             <Td width={30}>
                 <Description>{spec.description}</Description>
@@ -136,6 +136,7 @@ const RoleRow = ({
         <ExpandableTr
             rowIndex={rowIndex}
             expandableContent={expandableContent}
+            data-role={role.name}
         >
             <Td>{role.name}</Td>
             <Td>{system_role.meta?.galaxy_info?.description}</Td>
@@ -202,6 +203,7 @@ const AddRoleDialog = ({
 
     return (
         <Modal
+            id="add-role-modal"
             isOpen
             variant="medium"
             position="top"
@@ -235,13 +237,16 @@ const ConfiguredRoles = ({
     }
 
     const actions = (
-        <Button onClick={add_role}>
+        <Button
+            id="add-role"
+            onClick={add_role}
+        >
             {_("Add System Role")}
         </Button>
     );
 
     return (
-        <Card>
+        <Card id="configured-roles">
             <CardHeader actions={{ actions }}>
                 <CardTitle>{_("Configured System Roles")}</CardTitle>
             </CardHeader>

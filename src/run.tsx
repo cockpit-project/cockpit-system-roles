@@ -212,7 +212,7 @@ export const PlaybookOutput = () => {
     );
 
     return (
-        <Card>
+        <Card id="playbook-output">
             <CardHeader actions={{ actions }}>
                 <CardTitle>{_("Playbook execution")}</CardTitle>
             </CardHeader>
@@ -301,6 +301,7 @@ export const PlaybookRunner = ({
             <Flex>
                 <FlexItem>
                     <Button
+                        id="playbook-run"
                         onClick={() => run(false)}
                         variant="danger"
                     >
@@ -309,6 +310,7 @@ export const PlaybookRunner = ({
                 </FlexItem>
                 <FlexItem>
                     <Button
+                        id="playbook-check"
                         onClick={() => run(true)}
                         variant="secondary"
                     >

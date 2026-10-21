@@ -3,19 +3,80 @@
 #
 # Copyright (C) 2026 Red Hat, Inc.
 
+import json
+
 import testlib
 
 
 @testlib.nondestructive
 class TestSystemRoles(testlib.MachineCase):
 
+    def role_row(self, role: str) -> str:
+        return f"#configured-roles tbody tr[data-role=\"{role}\"]"
+
+    def role_var_row(self, role: str, var: str) -> str:
+        return f"{self.role_row(role)} + tr table tr[data-var=\"{var}\"]"
+
+    def expand_role_row(self, name: str) -> None:
+        b = self.browser
+        sel = self.role_row(name)
+        isExpanded = 'pf-m-expanded' in b.attr(f"{sel} + tr", "class")
+
+        if not isExpanded:
+            b.click(f"{sel} .pf-v6-c-table__toggle button")
+            b.wait_visible(f"{sel} + tr.pf-m-expanded")
+
     def testBasic(self) -> None:
         b = self.browser
+        m = self.machine
+
+        m.upload([ "files/linux-system-roles.test" ], "/usr/share/ansible/roles")
 
         self.login_and_go("/system-roles")
 
         b.wait_in_text("body", "Manage your system with Ansible and System Roles")
-        b.assert_pixels("h2", "header")
+
+        # Add the "test" role
+
+        b.click("#add-role")
+        b.click("#add-role-modal tr:contains('linux-system-roles.test')")
+        b.wait_not_present("#add-role-modal")
+
+        # Expand it, pixels
+
+        self.expand_role_row("linux-system-roles.test")
+        b.assert_pixels("#configured-roles", "role-variables")
+
+        # Change "str"
+
+        rvr = self.role_var_row("linux-system-roles.test", "test_str")
+        b.wait_val(rvr + " input", "hello")
+        b.set_input_text(rvr + " input", "Hi")
+
+        # Run check
+
+        b.click("#playbook-check")
+        b.wait_in_text("#playbook-output", "Drift check run")
+        b.wait_in_text("#playbook-output",
+                       "linux-system-roles.test : Record the parameters this role was invoked with CHANGES NEEDED")
+        b.wait_in_text("#playbook-output",
+                       "1 tasks have reported differences between the desired and the actual state of the machine.")
+
+        # Run real
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-output",
+                       "linux-system-roles.test : Record the parameters this role was invoked with CHANGED")
+        b.wait_in_text("#playbook-output",
+                       "1 tasks have made changes")
+
+        # Check file content
+
+        output = json.loads(m.execute("cat /tmp/test_output.json"))
+        self.assertEqual(output["test_str"], "Hi")
+        self.assertEqual(output["test_bool"], False)
+
+        # -> more ideas from coverage
 
 
 if __name__ == '__main__':

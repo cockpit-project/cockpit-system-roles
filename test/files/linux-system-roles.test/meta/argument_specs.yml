@@ -1,0 +1,25 @@
+argument_specs:
+  main:
+    short_description: Dummy role for testing
+    description:
+      - This role does not configure anything. It only writes the values
+        of its parameters to a file, so that tests can check which values
+        a playbook actually passed to it.
+    options:
+      test_str:
+        type: str
+        default: hello
+        description:
+          - An arbitrary string.
+          - "- This\n- has\n- bullets."
+          - And multiple paragraphs.
+      test_bool:
+        type: bool
+        default: false
+        description:
+          - An arbitrary flag.
+      test_raw:
+        type: raw
+        default: world
+        description:
+          - A raw value with a string as the default
