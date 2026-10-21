@@ -45,7 +45,7 @@ const DebouncedTextInput = ({
 } : {
     value: string,
     onChange: (val: string) => void,
-    placeholder: string,
+    placeholder?: string,
 }) => {
     const [localValue, setLocalValue] = useState<string>(value);
     const timer = useRef<number>(0);
@@ -55,7 +55,7 @@ const DebouncedTextInput = ({
             setLocalValue(value);
         },
         [value],
-    )
+    );
 
     return (
         <TextInput
@@ -73,10 +73,10 @@ const DebouncedTextInput = ({
                         500);
                 }
             }
-            placeholder={placeholder}
+            {...placeholder ? { placeholder } : {}}
         />
-    )
-}
+    );
+};
 
 function update_variable(config: AppConfig, role: RoleConfig, name: string, value: string) {
     try {
@@ -88,8 +88,7 @@ function update_variable(config: AppConfig, role: RoleConfig, name: string, valu
                     roles: conf.roles.map(
                         r =>
                             Object.is(r, role)
-                                ?
-                                {
+                                ? {
                                     ...r,
                                     vars: {
                                         ...r.vars,
@@ -138,7 +137,7 @@ const EditStr = ({
             onChange={val => update('"' + val + '"')}
         />
     );
-}
+};
 
 const EditChoices = ({
     value,
@@ -156,7 +155,7 @@ const EditChoices = ({
             onSelect={val => update('"' + val + '"')}
         />
     );
-}
+};
 
 const EditBool = ({
     value,
@@ -167,12 +166,12 @@ const EditBool = ({
 }) => {
     return (
         <Switch
-            isChecked={value == "true"}
-            label={value == "true" ? _("True") : _("False")}
+            isChecked={value === "true"}
+            label={value === "true" ? _("True") : _("False")}
             onChange={(_event, val) => update(val ? "true" : "false")}
         />
     );
-}
+};
 
 const EditPath = ({
     value,
@@ -185,7 +184,7 @@ const EditPath = ({
         <FileChooserInput
             value={value.substring(1, value.length - 1)}
             onChange={
-                (val, fromDialog) => {
+                (val, /* fromDialog */) => {
                     // XXX - debounce when not from dialog
                     update('"' + val + '"');
                 }
@@ -198,23 +197,23 @@ const EditPath = ({
             }
         />
     );
-}
+};
 
 function validate_value(value: string, spec: Option) {
-    if (value == "")
+    if (value === "")
         return;
-    if (spec.type == "raw") {
+    if (spec.type === "raw") {
         try {
             JSON.parse(value);
-        } catch (ex) {
+        } catch {
             return _("Must be valid JSON");
         }
     }
-    if (spec.type == "int") {
+    if (spec.type === "int") {
         let val;
         try {
             val = JSON.parse(value);
-        } catch (ex) {
+        } catch {
             return _("Must be an integer");
         }
         if (!Number.isInteger(val))
@@ -241,30 +240,30 @@ export const EditVariable = ({
     let enabled = false;
 
     if (spec.default !== undefined) {
-        if (!value && !(spec.type == "raw" || spec.type == "int"))
+        if (!value && !(spec.type === "raw" || spec.type === "int"))
             value = JSON.stringify(spec.default);
-    } else if (spec.type != "raw") {
+    } else if (spec.type !== "raw") {
         need_checkbox = true;
         enabled = !!value;
     }
 
     function update(val: string) {
-        if (spec.default !== undefined && !(spec.type == "raw" || spec.type == "int") && val == JSON.stringify(spec.default))
+        if (spec.default !== undefined && !(spec.type === "raw" || spec.type === "int") && val === JSON.stringify(spec.default))
             val = "";
         update_variable(config, role, name, val);
     }
 
     let comp;
 
-    if (spec.type == "str" && spec.choices)
-        comp = <EditChoices value={value} update={update}  choices={spec.choices} />;
-    else if (spec.type == "str")
+    if (spec.type === "str" && spec.choices)
+        comp = <EditChoices value={value} update={update} choices={spec.choices} />;
+    else if (spec.type === "str")
         comp = <EditStr value={value} update={update} />;
-    else if (spec.type == "bool")
+    else if (spec.type === "bool")
         comp = <EditBool value={value} update={update} />;
-    else if (spec.type == "path")
+    else if (spec.type === "path")
         comp = <EditPath value={value} update={update} />;
-    else if (spec.type == "int")
+    else if (spec.type === "int")
         comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />; // XXX - good enough for now
     else
         comp = <EditRaw value={value} placeholder={JSON.stringify(spec.default)} update={update} />;
@@ -282,25 +281,25 @@ export const EditVariable = ({
         return (
             <>
                 <Checkbox
-                    id={role.name +"/" + name}
+                    id={role.name + "/" + name}
                     label={_("Provide a value for this variable")}
                     isChecked={enabled}
                     onChange={
                         (_event, checked) => {
                             console.log("CHECKED", checked);
                             if (checked && !enabled) {
-                                if (spec.type == "str" && spec.choices)
-                                    update('"' + spec.choices[0] + '"')
-                                else if (spec.type == "str")
-                                    update("\"\"")
-                                else if (spec.type == "bool")
-                                    update("false")
-                                else if (spec.type == "path")
-                                    update("\"\"")
-                                else if (spec.type == "int")
-                                    update("0")
+                                if (spec.type === "str" && spec.choices)
+                                    update('"' + spec.choices[0] + '"');
+                                else if (spec.type === "str")
+                                    update("\"\"");
+                                else if (spec.type === "bool")
+                                    update("false");
+                                else if (spec.type === "path")
+                                    update("\"\"");
+                                else if (spec.type === "int")
+                                    update("0");
                             } else if (!checked) {
-                                update("")
+                                update("");
                             }
                         }
                     }
@@ -317,4 +316,4 @@ export const EditVariable = ({
                 {helper_text}
             </>
         );
-}
+};

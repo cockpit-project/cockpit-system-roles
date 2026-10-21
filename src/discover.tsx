@@ -6,21 +6,16 @@
 
 import cockpit from "cockpit";
 import React, { useState, useEffect } from "react";
-import { useInit} from "hooks";
 import * as python from "python";
-import { useDialogs} from "dialogs";
-import {basename } from "cockpit-path";
+import { useDialogs } from "dialogs";
+import { basename } from "cockpit-path";
 
-import { Modal, ModalBody, ModalHeader, ModalFooter } from '@patternfly/react-core/dist/esm/components/Modal';
-import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
-import { Button } from '@patternfly/react-core/dist/esm/components/Button';
-import { Table, Thead, Tbody, Tr, Th, Td, ExpandableRowContent } from '@patternfly/react-table';
+import { Modal, ModalBody, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal';
+import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 
 import { AppConfig, RoleConfig } from "./config";
 
 import discover_system_roles_py from "./discover-system-roles.py";
-
-const _ = cockpit.gettext;
 
 export interface Option {
     type: string,
@@ -33,7 +28,7 @@ interface ArgumentSpecs {
     short_description?: string,
     description?: string,
     options: Record<string, Option>,
-};
+}
 
 export interface SystemRole {
     path: string,
@@ -91,7 +86,7 @@ export const AddRoleDialog = ({
                 full_name: basename(role.path),
                 vars: {},
             };
-            await config.modify(conf => ({ ...conf, roles: [ ...conf.roles, role_config ] }));
+            await config.modify(conf => ({ ...conf, roles: [...conf.roles, role_config] }));
             Dialogs.close();
         } catch (ex) {
             // XXX - error toast
@@ -104,19 +99,19 @@ export const AddRoleDialog = ({
             <Tbody>
                 {
                     roles
-                        .filter(r => r.arguments?.main?.options)
-                        .map(
-                            r => (
-                                <Tr
+                            .filter(r => r.arguments?.main?.options)
+                            .map(
+                                r => (
+                                    <Tr
                                     key={r.path}
                                     isClickable
                                     onRowClick={() => add_role(r)}
-                                >
-                                    <Td>{r.name}</Td>
-                                    <Td>{r.description}</Td>
-                                </Tr>
+                                    >
+                                        <Td>{r.name}</Td>
+                                        <Td>{r.description}</Td>
+                                    </Tr>
+                                )
                             )
-                        )
                 }
             </Tbody>
         </Table>
@@ -135,4 +130,4 @@ export const AddRoleDialog = ({
             </ModalBody>
         </Modal>
     );
-}
+};

@@ -16,6 +16,9 @@ module = [
 
     # run without gobject-introspection
     "gi.*",
+
+    # needs stubs...
+    "yaml",
 ]
 
 [tool.ruff]

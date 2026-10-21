@@ -5,7 +5,7 @@
  */
 
 import cockpit from 'cockpit';
-import React, { useReducer, useState } from 'react';
+import React, { useReducer, useState, useEffect } from 'react';
 import { useInit, useFile } from "hooks";
 import { LongRunningProcess, ProcessState } from "long-running-process";
 
@@ -20,21 +20,15 @@ import prepare_playbook_run_sh from "./prepare-playbook-run.sh";
 
 const _ = cockpit.gettext;
 
-const JSONL = {
-    parse: (val: string) => {
-        return val.split("\n").filter(l => !!l).map(l => JSON.parse(l));
-    }
-};
-
 interface AnsibleEventPlay {
     id: string;
     name: string;
-};
+}
 
 interface AnsibleEventTask {
     id: string;
     name: string;
-};
+}
 
 interface AnsibleEventHosts {
     localhost: {
@@ -46,7 +40,7 @@ interface AnsibleEventHosts {
             msg: string,
         }[],
     }
-};
+}
 
 interface AnsibleEvent_CockpitRunStart {
     _event: "cockpit_system_role_run_start",
@@ -56,29 +50,29 @@ interface AnsibleEvent_CockpitRunStart {
 interface AnsibleEvent_PlayStart {
     _event: "v2_playbook_on_play_start",
     play: AnsibleEventPlay,
-};
+}
 
 interface AnsibleEvent_TaskStart {
     _event: "v2_playbook_on_task_start" | "v2_playbook_on_handler_task_start",
     task: AnsibleEventTask,
-};
+}
 
 interface AnsibleEvent_OK {
     _event: "v2_runner_on_ok",
     task: AnsibleEventTask,
     hosts: AnsibleEventHosts
-};
+}
 
 interface AnsibleEvent_Skipped {
     _event: "v2_runner_on_skipped",
     task: AnsibleEventTask,
-};
+}
 
 interface AnsibleEvent_Failed {
     _event: "v2_runner_on_failed",
     task: AnsibleEventTask,
     hosts: AnsibleEventHosts
-};
+}
 
 interface AnsibleEvent_Stats {
     _event: "v2_playbook_on_stats",
@@ -93,31 +87,67 @@ interface AnsibleEvent_Stats {
             unreachable: number,
         }
     }
-};
+}
 
 type AnsibleEvent = AnsibleEvent_CockpitRunStart | AnsibleEvent_PlayStart | AnsibleEvent_TaskStart | AnsibleEvent_OK | AnsibleEvent_Skipped | AnsibleEvent_Failed | AnsibleEvent_Stats;
+
+const JSONL = {
+    parse: (val: string) => {
+        return val.split("\n").filter(l => !!l)
+                .map(l => JSON.parse(l));
+    }
+};
+
+export const useAnsibleEvents = (): AnsibleEvent[] | Error | null => {
+    const [events, setEvents] = useState<AnsibleEvent[] | Error | null>(null);
+
+    useEffect(
+        () => {
+            const file: cockpit.FileHandle<unknown> = cockpit.file(
+                "/run/cockpit/system-roles/run.out",
+                { syntax: JSONL, superuser: "try" }
+            );
+
+            file.watch(
+                (data, tag, error) => {
+                    if (error)
+                        setEvents(new Error(error.message));
+                    else {
+                        cockpit.assert(tag);
+                    if (data)
+                        setEvents(data as AnsibleEvent[]);
+                    else
+                        setEvents([]);
+                    }
+                }
+            );
+        },
+        []
+    );
+
+    return events;
+};
 
 function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
     let check_mode: boolean = false;
     let running_task: AnsibleEventTask | null = null;
-    let results = [];
+    const results = [];
 
     // console.log("EVENTS", events);
 
     for (const event of events) {
-        if (event._event == "cockpit_system_role_run_start") {
-            console.log("ARGS", event.arguments);
+        if (event._event === "cockpit_system_role_run_start") {
             check_mode = event.arguments.includes("--check");
             if (check_mode)
                 results.push(<div><i>{_("Drift check run")}</i></div>);
-        } else if (event._event == "v2_playbook_on_play_start") {
+        } else if (event._event === "v2_playbook_on_play_start") {
             cockpit.assert(!running_task);
             results.push(<div><b>{event.play.name}</b></div>);
-        } else if (event._event == "v2_playbook_on_task_start" || event._event == "v2_playbook_on_handler_task_start") {
+        } else if (event._event === "v2_playbook_on_task_start" || event._event === "v2_playbook_on_handler_task_start") {
             cockpit.assert(!running_task);
             running_task = event.task;
-        } else if (event._event == "v2_runner_on_ok") {
-            cockpit.assert(running_task && running_task.id == event.task.id);
+        } else if (event._event === "v2_runner_on_ok") {
+            cockpit.assert(running_task && running_task.id === event.task.id);
             running_task = null;
             if (event.hosts.localhost.changed) {
                 results.push(<div>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</div>);
@@ -125,13 +155,13 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
                     results.push(<div>- {event.hosts.localhost.msg}</div>);
             } else if (show_all)
                 results.push(<div>{event.task.name} {_("(no change)")}</div>);
-        } else if (event._event == "v2_runner_on_skipped") {
-            cockpit.assert(running_task && running_task.id == event.task.id);
+        } else if (event._event === "v2_runner_on_skipped") {
+            cockpit.assert(running_task && running_task.id === event.task.id);
             running_task = null;
             if (show_all)
                 results.push(<div>{event.task.name} {_("(skipped)")}</div>);
-        } else if (event._event == "v2_runner_on_failed") {
-            cockpit.assert(running_task && running_task.id == event.task.id);
+        } else if (event._event === "v2_runner_on_failed") {
+            cockpit.assert(running_task && running_task.id === event.task.id);
             running_task = null;
             results.push(<div>{event.task.name} {_("FAILED")}</div>);
             results.push(<div>- {event.hosts.localhost.msg}</div>);
@@ -141,19 +171,19 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
                         results.push(<div>- {res.msg}</div>);
                 }
             }
-        } else if (event._event == "v2_playbook_on_stats") {
+        } else if (event._event === "v2_playbook_on_stats") {
             cockpit.assert(!running_task);
             results.push(<br />);
             const stats = event.stats.localhost;
-            if (stats.changed != 0) {
+            if (stats.changed !== 0) {
                 if (check_mode)
                     results.push(<div>{cockpit.format(_("$0 tasks have reported differences between the desired and the actual state of the machine."), stats.changed)}</div>);
                 else
                     results.push(<div>{cockpit.format(_("$0 tasks have made changes."), stats.changed)}</div>);
             }
-            if (stats.failures != 0)
+            if (stats.failures !== 0)
                 results.push(<div>{cockpit.format(_("$0 tasks have failed."), stats.failures)}</div>);
-            if (stats.changed == 0 && stats.failures == 0) {
+            if (stats.changed === 0 && stats.failures === 0) {
                 if (check_mode)
                     results.push(<div>{_("The machine is in the desired state.")}</div>);
                 else
@@ -163,7 +193,7 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
     }
 
     if (running_task)
-        results.push(<div>{running_task.name} <Spinner isInline/></div>);
+        results.push(<div>{running_task.name} <Spinner isInline /></div>);
 
     return results;
 }
@@ -176,8 +206,7 @@ export const PlaybookRunner = ({
     const [, forceUpdate] = useReducer(x => x + 1, 0);
     const process = useInit(() => new LongRunningProcess("cockpit-system-roles-runner.service", forceUpdate));
 
-    // XXX - hand code this to get the types correct?
-    const output: AnsibleEvent[] = useFile("/run/cockpit/system-roles/run.out", { superuser: "try", syntax: JSONL });
+    const output = useAnsibleEvents();
     const error_output: string | false | null = useFile("/run/cockpit/system-roles/run.err", { superuser: "try" });
 
     const [showAll, setShowAll] = useState<boolean>(false);
@@ -192,11 +221,11 @@ export const PlaybookRunner = ({
                     vars: (
                         Object.fromEntries(
                             Object.entries(role.vars)
-                                .filter(([_name, conf]) => !!conf.value)
-                                .map(([name, conf]) => [name, JSON.parse(conf.value)]))
+                                    .filter(([, conf]) => !!conf.value)
+                                    .map(([name, conf]) => [name, JSON.parse(conf.value)]))
                     ),
-                    roles: [ role.full_name ],
-                }
+                    roles: [role.full_name],
+                };
             }
         );
     }
@@ -205,7 +234,7 @@ export const PlaybookRunner = ({
         try {
             const playbook = generate_playbook();
             await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
-            process.run([ "/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : []) ], {});
+            process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : [])], {});
         } catch (ex) {
             // XXX - error toast
             console.log("Can't run", ex);
@@ -232,9 +261,9 @@ export const PlaybookRunner = ({
     }
 
     let actions;
-    if (process.state == ProcessState.INIT)
+    if (process.state === ProcessState.INIT)
         actions = <Spinner />;
-    else if (process.state == ProcessState.STOPPED)
+    else if (process.state === ProcessState.STOPPED)
         actions = (
             <>
                 {_("Idle")}
@@ -254,7 +283,7 @@ export const PlaybookRunner = ({
                 </Button>
             </>
         );
-    else if (process.state == ProcessState.RUNNING)
+    else if (process.state === ProcessState.RUNNING)
         actions = (
             <>
                 {cockpit.format(_("Running since $0"), process.startTimestamp)}
@@ -266,7 +295,7 @@ export const PlaybookRunner = ({
                 </Button>
             </>
         );
-    else if (process.state == ProcessState.FAILED)
+    else if (process.state === ProcessState.FAILED)
         actions = (
             <>
                 {_("Failed")}
@@ -285,7 +314,7 @@ export const PlaybookRunner = ({
                 <CardTitle>{_("Playbook execution")}</CardTitle>
             </CardHeader>
             <CardBody>
-                {output && render_ansible_events(output, showAll)}
+                {output && !(output instanceof Error) && render_ansible_events(output, showAll)}
                 <br />
                 <Switch
                     label={_("Show all execution steps")}
@@ -301,4 +330,4 @@ export const PlaybookRunner = ({
             </CardBody>
         </Card>
     );
-}
+};

@@ -5,11 +5,11 @@
  */
 
 import cockpit from 'cockpit';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useDialogs, WithDialogs } from "dialogs";
 
 import { Page, PageSection } from '@patternfly/react-core/dist/esm/components/Page';
-import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card';
+import { Card, CardHeader, CardTitle } from '@patternfly/react-core/dist/esm/components/Card';
 import { Table, Tbody, Tr, Td, ExpandableRowContent } from '@patternfly/react-table';
 import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
@@ -18,12 +18,12 @@ import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/
 import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
 import { Remarkable } from "remarkable";
 
-const _ = cockpit.gettext;
-
-import { useAppConfig, AppConfig, RoleConfig, VarConfig } from "./config";
+import { useAppConfig, AppConfig, RoleConfig } from "./config";
 import { useSystemRoles, SystemRole, AddRoleDialog } from "./discover";
 import { PlaybookRunner } from "./run";
 import { EditVariable } from "./edit";
+
+const _ = cockpit.gettext;
 
 const ExternalLinkButton = (props : ButtonProps) => (
     <Button
@@ -113,7 +113,6 @@ const RoleRow = ({
                                 {
                                     Object.entries(system_role.arguments?.main?.options || {}).map(
                                         ([name, sys_v]) => {
-                                            const conf_v = role.vars[name];
                                             return (
                                                 <Tr key={name}>
                                                     <Td modifier="fitContent">{shorten(name)}</Td>
@@ -176,23 +175,26 @@ const ConfiguredRoles = ({
                 {
                     config.config.roles.map(
                         (r, i) => {
-                            const sys_r = roles.find(sr => sr.name == r.name); // XXX - use hashtable
-                            return (
-                                <RoleRow
-                                    config={config}
-                                    key={r.name}
-                                    role={r}
-                                    system_role={sys_r}
-                                    rowIndex={i}
-                                />
-                            );
+                            const sys_r = roles.find(sr => sr.name === r.name); // XXX - use hashtable
+                            if (sys_r)
+                                return (
+                                    <RoleRow
+                                        config={config}
+                                        key={r.name}
+                                        role={r}
+                                        system_role={sys_r}
+                                        rowIndex={i}
+                                    />
+                                );
+                            else
+                                return null;
                         }
                     )
                 }
             </Table>
         </Card>
-    )
-}
+    );
+};
 
 const MainSection = ({
     config,
@@ -222,9 +224,8 @@ const MainSection = ({
             </EmptyState>
         );
 
-    return <ConfiguredRoles config={config} roles={roles} />
-}
-
+    return <ConfiguredRoles config={config} roles={roles} />;
+};
 
 export const Application = () => {
     const config = useAppConfig();
