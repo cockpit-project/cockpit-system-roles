@@ -344,9 +344,10 @@ export const Application = () => {
                 </PageSection>
                 <PageSection hasBodyWrapper={false}>
                     {
-                        superuser.allowed && config instanceof AppConfig &&
+                        superuser.allowed && config && roles &&
                             <PlaybookRunner
                                 config={config}
+                                system_roles={roles}
                             />
                     }
                 </PageSection>

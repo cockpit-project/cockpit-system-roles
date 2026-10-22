@@ -13,7 +13,7 @@ import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/comp
 
 import { JSON_parse_carefully, JSON_parse_type, DebouncedTextInput, DebouncedFileChooserInput, useDebouncer } from "./utils";
 import { AppConfig, RoleConfig, update_variable } from "./config";
-import { Option } from "./roles";
+import { SystemRoles, Option } from "./roles";
 
 const _ = cockpit.gettext;
 
@@ -342,3 +342,18 @@ export const EditVariable = ({
             </>
         );
 };
+
+export function validate_all(config: AppConfig, system_roles: SystemRoles): boolean {
+    function validate_role(role: RoleConfig) {
+        const system_role = system_roles[role.name];
+        return Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).every(
+            ([name, spec]) => {
+                const conf_v = role.vars[name];
+                let value = (conf_v && conf_v.value) ? conf_v.value : "";
+                return !value || (validate_value(value, spec) === undefined);
+            }
+        )
+    }
+
+    return config.config.roles.every(validate_role);
+}

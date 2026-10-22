@@ -19,6 +19,8 @@ import { Flex, FlexItem } from '@patternfly/react-core/dist/esm/layouts/Flex';
 import { toaster } from "./toaster";
 import { AppConfig } from "./config";
 import { run_debouncers_now } from "./utils";
+import { SystemRoles } from "./roles";
+import { validate_all } from "./edit";
 
 import prepare_playbook_run_sh from "./prepare-playbook-run.sh";
 
@@ -230,8 +232,10 @@ export const PlaybookOutput = () => {
 
 export const PlaybookRunner = ({
     config,
+    system_roles,
 } : {
     config: AppConfig,
+    system_roles: SystemRoles,
 }) => {
     const previousState = useRef(ProcessState.INIT);
     const [, forceUpdate] = useReducer(x => x + 1, 0);
@@ -259,8 +263,12 @@ export const PlaybookRunner = ({
         }
     );
 
+    const valid = validate_all(config, system_roles);
+
     async function generate_playbook() {
         await run_debouncers_now();
+        if (!validate_all(config, system_roles))
+            return null;
         const roles = config.config.roles;
         return roles.map(
             role => {
@@ -282,6 +290,8 @@ export const PlaybookRunner = ({
     async function run(dry: boolean) {
         try {
             const playbook = await generate_playbook();
+            if (!playbook)
+                return;
             await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
             if (process.state === ProcessState.FAILED)
                 process.reset();
@@ -310,6 +320,7 @@ export const PlaybookRunner = ({
                         id="playbook-run"
                         onClick={() => run(false)}
                         variant="danger"
+                        isDisabled={!valid}
                     >
                         {_("Apply the configuration to the local machine")}
                     </Button>
@@ -319,6 +330,7 @@ export const PlaybookRunner = ({
                         id="playbook-check"
                         onClick={() => run(true)}
                         variant="secondary"
+                        isDisabled={!valid}
                     >
                         {_("Check whether any changes are necessary")}
                     </Button>
