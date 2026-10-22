@@ -4,7 +4,7 @@
  * Copyright (C) 2026 Red Hat, Inc.
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
@@ -12,6 +12,7 @@ import { RhUiExternalLinkIcon } from '@patternfly/react-icons';
 import { Tbody, Tr, TrProps, Td, ExpandableRowContent } from '@patternfly/react-table';
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
+import { useObject } from 'hooks';
 
 export function shortenstart(prefix: string, val: string): string {
     if (val.startsWith(prefix))
@@ -90,17 +91,76 @@ export const ExpandableTr = ({
     );
 };
 
+const debouncers = new Set<Debouncer>();
+
+class Debouncer {
+    #timeout: number = 0;
+    #func: (() => Promise<void>) | null = null;
+    #promise: Promise<void> | null = null;
+
+    constructor() {
+        debouncers.add(this);
+    }
+
+    destroy() {
+        if (this.#timeout)
+            window.clearTimeout(this.#timeout);
+        debouncers.delete(this);
+    }
+
+    #start() {
+        if (this.#func)
+            this.#promise = this.#func().then(() => { this.#promise = null });
+        this.#func = null;
+    }
+
+    trigger(delay: number, func: () => Promise<void>): void {
+        if (this.#timeout)
+            window.clearTimeout(this.#timeout);
+        this.#func = func;
+        this.#timeout = window.setTimeout(
+            async () => {
+                this.#timeout = 0;
+                this.#start();
+            },
+            delay,
+        );
+    }
+
+    async run_now () {
+        if (this.#timeout)
+            window.clearTimeout(this.#timeout);
+        if (!this.#promise)
+            this.#start();
+        if (this.#promise)
+            await this.#promise;
+    }
+}
+
+export function useDebouncer() {
+    return useObject(
+        () => new Debouncer(),
+        db => db.destroy(),
+        [],
+    );
+}
+
+export async function run_debouncers_now() {
+    for (const db of debouncers.values())
+        await db.run_now();
+}
+
 export const DebouncedTextInput = ({
     value,
     onChange,
     placeholder,
 } : {
     value: string,
-    onChange: (val: string) => void,
+    onChange: (val: string) => Promise<void>,
     placeholder?: string,
 }) => {
     const [localValue, setLocalValue] = useState<string>(value);
-    const timer = useRef<number>(0);
+    const debouncer = useDebouncer();
 
     useEffect(
         () => {
@@ -115,14 +175,7 @@ export const DebouncedTextInput = ({
             onChange={
                 (_event, val) => {
                     setLocalValue(val);
-                    if (timer.current)
-                        window.clearTimeout(timer.current);
-                    timer.current = window.setTimeout(
-                        () => {
-                            timer.current = 0;
-                            onChange(val);
-                        },
-                        500);
+                    debouncer.trigger(500, () => onChange(val))
                 }
             }
             {...placeholder ? { placeholder } : {}}
@@ -136,11 +189,11 @@ export const DebouncedFileChooserInput = ({
     fileChooserProps,
 } : {
     value: string,
-    onChange: (val: string) => void,
+    onChange: (val: string) => Promise<void>,
     fileChooserProps: FileChooserProps,
 }) => {
     const [localValue, setLocalValue] = useState<string>(value);
-    const timer = useRef<number>(0);
+    const debouncer = useDebouncer();
 
     useEffect(
         () => {
@@ -155,17 +208,10 @@ export const DebouncedFileChooserInput = ({
             onChange={
                 (val, fromDialog) => {
                     setLocalValue(val);
-                    if (timer.current)
-                        window.clearTimeout(timer.current);
-                    if (!fromDialog) {
-                        timer.current = window.setTimeout(
-                            () => {
-                                timer.current = 0;
-                                onChange(val);
-                            },
-                            500);
-                    } else
-                        onChange(val);
+                    if (!fromDialog)
+                        debouncer.trigger(500, () => onChange(val))
+                    else
+                        debouncer.trigger(0, () => onChange(val))
                 }
             }
             fileChooserProps={fileChooserProps}

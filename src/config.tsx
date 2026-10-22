@@ -98,7 +98,9 @@ export class AppConfig {
     }
 
     async modify(func: (old: Config) => Config) {
-        cockpit.assert(this.#file && this.config);
+        // This will also call the watch callback, so if you await the
+        // call to "modify", this.config is guaranteed to reflect the
+        // changes.
         await this.#file.replace(func(this.config), this.#tag);
     }
 }

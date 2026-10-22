@@ -11,7 +11,7 @@ import { SimpleSelect } from 'cockpit-components-simple-select';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
 
-import { JSON_parse_carefully, JSON_parse_type, DebouncedTextInput, DebouncedFileChooserInput } from "./utils";
+import { JSON_parse_carefully, JSON_parse_type, DebouncedTextInput, DebouncedFileChooserInput, useDebouncer } from "./utils";
 import { AppConfig, RoleConfig, update_variable } from "./config";
 import { Option } from "./roles";
 
@@ -116,7 +116,7 @@ const EditRaw = ({
     placeholder,
 } : {
     value: string,
-    update: (val: string) => void,
+    update: (val: string) => Promise<void>,
     placeholder: string,
 }) => {
     return (
@@ -133,7 +133,7 @@ const EditStr = ({
     update,
 } : {
     value: string,
-    update: (val: string) => void,
+    update: (val: string) => Promise<void>,
 }) => {
     return (
         <DebouncedTextInput
@@ -149,14 +149,21 @@ const EditChoices = ({
     choices,
 } : {
     value: string,
-    update: (val: string) => void,
+    update: (val: string) => Promise<void>,
     choices: string[],
 }) => {
+    // XXX - we use a debouncer to make the "Run" button wait for our update promise to settle...
+    const debouncer = useDebouncer();
+
     return (
         <SimpleSelect<string>
             selected={JSON_parse_type(value, choices[0])}
             options={choices.map(c => ({ value: c, content: c }))}
-            onSelect={val => update(JSON.stringify(val))}
+            onSelect={
+                val => {
+                    debouncer.trigger(0, () => update(JSON.stringify(val)));
+                }
+            }
         />
     );
 };
@@ -166,14 +173,21 @@ const EditBool = ({
     update,
 } : {
     value: string,
-    update: (val: string) => void,
+    update: (val: string) => Promise<void>,
 }) => {
+    // XXX - we use a debouncer to make the "Run" button wait for our update promise to settle...
+    const debouncer = useDebouncer();
+
     const v = JSON_parse_type(value, false);
     return (
         <Switch
             isChecked={v}
             label={v ? _("True") : _("False")}
-            onChange={(_event, val) => update(JSON.stringify(val))}
+            onChange={
+                (_event, val) => {
+                    debouncer.trigger(0, () => update(JSON.stringify(val)));
+                }
+            }
         />
     );
 };
@@ -183,7 +197,7 @@ const EditPath = ({
     update,
 } : {
     value: string,
-    update: (val: string) => void,
+    update: (val: string) => Promise<void>,
 }) => {
     return (
         <DebouncedFileChooserInput
@@ -259,12 +273,12 @@ export const EditVariable = ({
         }
     }
 
-    function update(val: string) {
+    async function update(val: string) {
         if (specific_ui_types.includes(type)) {
             if (has_default(spec) && JSON_parse_carefully(val) === spec.default)
                 val = "";
         }
-        update_variable(config, role, name, val);
+        await update_variable(config, role, name, val);
     }
 
     let comp;

@@ -18,6 +18,7 @@ import { Flex, FlexItem } from '@patternfly/react-core/dist/esm/layouts/Flex';
 
 import { toaster } from "./toaster";
 import { AppConfig } from "./config";
+import { run_debouncers_now } from "./utils";
 
 import prepare_playbook_run_sh from "./prepare-playbook-run.sh";
 
@@ -258,7 +259,8 @@ export const PlaybookRunner = ({
         }
     );
 
-    function generate_playbook() {
+    async function generate_playbook() {
+        await run_debouncers_now();
         const roles = config.config.roles;
         return roles.map(
             role => {
@@ -279,7 +281,7 @@ export const PlaybookRunner = ({
 
     async function run(dry: boolean) {
         try {
-            const playbook = generate_playbook();
+            const playbook = await generate_playbook();
             await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
             if (process.state === ProcessState.FAILED)
                 process.reset();
