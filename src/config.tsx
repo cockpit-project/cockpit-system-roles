@@ -104,7 +104,8 @@ export class AppConfig {
 }
 
 export const useAppConfig = () => {
-    const [config, setConfig] = useState<AppConfig | Error | null>(null);
+    const [config, setConfig] = useState<AppConfig | null>(null);
+    const [error, setError] = useState<unknown>(null);
     const [, forceUpdate] = useReducer(x => x + 1, 0);
 
     useEffect(
@@ -116,13 +117,15 @@ export const useAppConfig = () => {
 
             file.watch(
                 (data, tag, error) => {
-                    if (error)
-                        setConfig(new Error(error.message));
-                    else {
+                    if (error) {
+                        setError(error);
+                        setConfig(null);
+                    } else {
                         cockpit.assert(tag);
                         if (!data)
                             data = { roles: [] };
 
+                        setError(null);
                         setConfig(config => {
                             if (config instanceof AppConfig) {
                                 config._set(file, data, tag);
@@ -139,7 +142,7 @@ export const useAppConfig = () => {
         [],
     );
 
-    return config;
+    return { config, error };
 };
 
 export async function update_variable(config: AppConfig, role: RoleConfig, name: string, value: string) {

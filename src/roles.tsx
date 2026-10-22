@@ -140,7 +140,8 @@ async function discover_system_roles(): Promise<DiscoverResult> {
 export type SystemRoles = Record<string, SystemRole>;
 
 export const useSystemRoles = () => {
-    const [roles, setRoles] = useState<SystemRoles | Error | null>(null);
+    const [roles, setRoles] = useState<SystemRoles | null>(null);
+    const [error, setError] = useState<unknown>(null);
 
     useEffect(
         () => {
@@ -149,8 +150,10 @@ export const useSystemRoles = () => {
                     const result = await discover_system_roles();
                     const roles = result.roles.map(r => validate(r.name, r, import_SystemRole, null));
                     setRoles(Object.fromEntries(roles.filter(r => !!r).map(r => [r.name, r])));
+                    setError(null);
                 } catch (ex) {
-                    setRoles(new Error(String(ex)));
+                    setRoles(null);
+                    setError(ex);
                 }
             }
 
@@ -159,5 +162,5 @@ export const useSystemRoles = () => {
         [],
     );
 
-    return roles;
+    return { roles, error };
 };

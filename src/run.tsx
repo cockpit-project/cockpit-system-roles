@@ -101,8 +101,9 @@ const JSONL = {
     }
 };
 
-export const useAnsibleEvents = (): AnsibleEvent[] | Error | null => {
-    const [events, setEvents] = useState<AnsibleEvent[] | Error | null>(null);
+export const useAnsibleEvents = () => {
+    const [events, setEvents] = useState<AnsibleEvent[] | null>(null);
+    const [error, setError] = useState<unknown>(null);
 
     useEffect(
         () => {
@@ -113,19 +114,20 @@ export const useAnsibleEvents = (): AnsibleEvent[] | Error | null => {
 
             file.watch(
                 (data, _tag, error) => {
-                    if (error)
-                        setEvents(new Error(error.message));
-                    else if (data)
-                        setEvents(data as AnsibleEvent[]);
-                    else
-                        setEvents([]);
+                    if (error) {
+                        setEvents(null);
+                        setError(null);
+                    } else {
+                        setEvents(data ? data as AnsibleEvent[] : []);
+                        setError(null);
+                    }
                 }
             );
         },
         []
     );
 
-    return events;
+    return { events, error };
 };
 
 function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
@@ -202,7 +204,7 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
 
 export const PlaybookOutput = () => {
     const [showAll, setShowAll] = useState(false);
-    const output = useAnsibleEvents();
+    const { events, error } = useAnsibleEvents();
 
     const actions = (
         <Switch
@@ -218,7 +220,8 @@ export const PlaybookOutput = () => {
                 <CardTitle>{_("Playbook execution")}</CardTitle>
             </CardHeader>
             <CardBody>
-                {output && !(output instanceof Error) && render_ansible_events(output, showAll)}
+                { error ? cockpit.format(_("Can't load playbook events: $0"), String(error)) : null }
+                { events && render_ansible_events(events, showAll) }
             </CardBody>
         </Card>
     );

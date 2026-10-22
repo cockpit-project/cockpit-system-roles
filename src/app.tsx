@@ -276,10 +276,14 @@ const ConfiguredRoles = ({
 
 const MainSection = ({
     config,
+    config_error,
     roles,
+    roles_error,
 } : {
-    config: AppConfig | Error | null,
-    roles: SystemRoles | Error | null,
+    config: AppConfig | null,
+    roles: SystemRoles | null,
+    config_error: unknown,
+    roles_error: unknown,
 }) => {
     if (superuser.allowed === false)
         return (
@@ -288,25 +292,25 @@ const MainSection = ({
             </EmptyState>
         );
 
-    if (!config || !roles)
-        return (
-            <Bullseye>
-                <Spinner />
-            </Bullseye>
-        );
-
-    if (config instanceof Error)
+    if (config_error)
         return (
             <EmptyState>
                 {cockpit.format(_("Can't load configuration: $0"), String(config))}
             </EmptyState>
         );
 
-    if (roles instanceof Error)
+    if (roles_error)
         return (
             <EmptyState>
                 {cockpit.format(_("Can't load system roles: $0"), String(roles))}
             </EmptyState>
+        );
+
+    if (!config || !roles)
+        return (
+            <Bullseye>
+                <Spinner />
+            </Bullseye>
         );
 
     return (
@@ -318,8 +322,8 @@ const MainSection = ({
 };
 
 export const Application = () => {
-    const config = useAppConfig();
-    const roles = useSystemRoles();
+    const { config, error: config_error } = useAppConfig();
+    const { roles, error: roles_error } = useSystemRoles();
 
     return (
         <WithDialogs>
@@ -331,7 +335,12 @@ export const Application = () => {
                     </Bullseye>
                 </PageSection>
                 <PageSection hasBodyWrapper={false} isFilled hasOverflowScroll>
-                    <MainSection config={config} roles={roles} />
+                    <MainSection
+                        config={config}
+                        config_error={config_error}
+                        roles={roles}
+                        roles_error={roles_error}
+                    />
                 </PageSection>
                 <PageSection hasBodyWrapper={false}>
                     {
