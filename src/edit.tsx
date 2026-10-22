@@ -349,10 +349,10 @@ export function validate_all(config: AppConfig, system_roles: SystemRoles): bool
         return Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).every(
             ([name, spec]) => {
                 const conf_v = role.vars[name];
-                let value = (conf_v && conf_v.value) ? conf_v.value : "";
+                const value = (conf_v && conf_v.value) ? conf_v.value : "";
                 return !value || (validate_value(value, spec) === undefined);
             }
-        )
+        );
     }
 
     return config.config.roles.every(validate_role);

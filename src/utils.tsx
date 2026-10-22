@@ -91,21 +91,21 @@ export const ExpandableTr = ({
     );
 };
 
-const debouncers = new Set<Debouncer>();
-
 class Debouncer {
     #timeout: number = 0;
     #func: (() => Promise<void>) | null = null;
     #promise: Promise<void> | null = null;
 
+    static debouncers = new Set<Debouncer>();
+
     constructor() {
-        debouncers.add(this);
+        Debouncer.debouncers.add(this);
     }
 
     destroy() {
         if (this.#timeout)
             window.clearTimeout(this.#timeout);
-        debouncers.delete(this);
+        Debouncer.debouncers.delete(this);
     }
 
     #start() {
@@ -146,7 +146,7 @@ export function useDebouncer() {
 }
 
 export async function run_debouncers_now() {
-    for (const db of debouncers.values())
+    for (const db of Debouncer.debouncers.values())
         await db.run_now();
 }
 
@@ -175,7 +175,7 @@ export const DebouncedTextInput = ({
             onChange={
                 (_event, val) => {
                     setLocalValue(val);
-                    debouncer.trigger(500, () => onChange(val))
+                    debouncer.trigger(500, () => onChange(val));
                 }
             }
             {...placeholder ? { placeholder } : {}}
@@ -209,9 +209,9 @@ export const DebouncedFileChooserInput = ({
                 (val, fromDialog) => {
                     setLocalValue(val);
                     if (!fromDialog)
-                        debouncer.trigger(500, () => onChange(val))
+                        debouncer.trigger(500, () => onChange(val));
                     else
-                        debouncer.trigger(0, () => onChange(val))
+                        debouncer.trigger(0, () => onChange(val));
                 }
             }
             fileChooserProps={fileChooserProps}
