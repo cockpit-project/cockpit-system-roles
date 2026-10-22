@@ -290,6 +290,7 @@ export const PlaybookRunner = ({
     async function run(dry: boolean) {
         try {
             const playbook = await generate_playbook();
+            console.log("PLAYBOOK", JSON.stringify(playbook));
             if (!playbook)
                 return;
             await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));

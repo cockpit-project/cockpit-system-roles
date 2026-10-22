@@ -149,6 +149,7 @@ const RoleRow = ({
             </Td>
             <Td modifier="fitContent" hasAction>
                 <Button
+                    data-remove
                     onClick={() => remove_role(config, role.name)}
                     icon={<RhUiTrashIcon />}
                     variant="plain"

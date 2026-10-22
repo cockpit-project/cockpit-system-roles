@@ -4,6 +4,7 @@
 # Copyright (C) 2026 Red Hat, Inc.
 
 import json
+import time
 
 import testlib
 
@@ -36,13 +37,26 @@ class TestSystemRoles(testlib.MachineCase):
 
         b.wait_in_text("body", "Manage your system with Ansible and System Roles")
 
-        # Add the "test" role
+        # Add the "nbde_server" role
 
         b.click("#add-role")
+        b.click("#add-role-modal tr:contains('linux-system-roles.nbde_server')")
+        b.wait_not_present("#add-role-modal")
+
+        # Add the "test" role, nbde_server should not be offered
+
+        b.click("#add-role")
+        b.wait_visible("#add-role-modal tr:contains('linux-system-roles.test')")
+        b.wait_not_present("#add-role-modal tr:contains('linux-system-roles.nbde_server')")
         b.click("#add-role-modal tr:contains('linux-system-roles.test')")
         b.wait_not_present("#add-role-modal")
 
-        # Expand it, pixels
+        # Remove "nbde_server"
+
+        b.click(self.role_row("linux-system-roles.nbde_server") + " button[data-remove]")
+        b.wait_not_present(self.role_row("linux-system-roles.nbde_server"))
+
+        # Expand "test" role, pixels
 
         self.expand_role_row("linux-system-roles.test")
         b.assert_pixels("#configured-roles", "role-variables")
@@ -52,6 +66,7 @@ class TestSystemRoles(testlib.MachineCase):
         rvr = self.role_var_row("linux-system-roles.test", "test_str")
         b.wait_val(rvr + " input", "hello")
         b.set_input_text(rvr + " input", "Hi")
+        time.sleep(1) # XXX
 
         # Run check
 
@@ -76,26 +91,70 @@ class TestSystemRoles(testlib.MachineCase):
         self.assertEqual(output["test_str"], "Hi")
         self.assertEqual(output["test_bool"], False)
 
+        # Artificially clear run.out so that the tests will pick up
+        # the next run correctly.
+
+        m.execute("rm /run/cockpit/system-roles/run.out")
+        b.wait_not_in_text("#playbook-output",
+                           "1 tasks have made changes")
+
+        # Set "test_str" back to default, it should disappear from the
+        # config (we do this for code coverage)
+
+        b.set_input_text(rvr + " input", "hello")
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-output",
+                       "1 tasks have made changes")
+
+        output = json.loads(m.execute("cat /tmp/test_output.json"))
+        self.assertEqual(output["test_str"], "hello")
+        self.assertEqual(output["test_bool"], False)
+
+        # Artificially clear run.out so that the tests will pick up
+        # the next run correctly.
+
+        m.execute("rm /run/cockpit/system-roles/run.out")
+        b.wait_not_in_text("#playbook-output",
+                           "1 tasks have made changes")
+
+        # Set a couple other variables of various types
+
+        b.set_checked(self.role_var_row("linux-system-roles.test", "test_bool") + " input", True)
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
+                         "[ { \"foo\": \"bar\" } ]")
+        b.set_checked(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=checkbox]", True)
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=text]", "world")
+        b.select_PF(self.role_var_row("linux-system-roles.test", "test_choices") + " .pf-v6-c-menu-toggle",
+                    "red")
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_path") + " input", "/etc")
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "12")
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-output",
+                       "1 tasks have made changes")
+
+        playbook = json.loads(m.execute("cat /run/cockpit/system-roles/playbook.json"))
+
+        self.assertEqual(playbook[0]["name"], "linux-system-roles.test")
+        self.assertEqual(playbook[0]["vars"]["test_bool"], True)
+        self.assertEqual(playbook[0]["vars"]["test_none"], "world")
+        self.assertEqual(playbook[0]["vars"]["test_raw"], [ { "foo": "bar" } ])
+        self.assertEqual(playbook[0]["vars"]["test_choices"], "red")
+        self.assertEqual(playbook[0]["vars"]["test_path"], "/etc")
+        self.assertEqual(playbook[0]["vars"]["test_int"], 12)
+
         # -> more ideas from coverage
         #
-        # - trying to add a rule twice
-        # - removing a rule
-        # - setting a variable back to its default -> disappears from config
-        # - variable without default
-        # - description that is not an array
-        # - role without argument_specs.main
-        # - updating a role to drop a variable
+        # - validation of JSON, dicts, lists, ints, floats
         # - non-superuser
         # - crash when loading system roles
         # - crash when loading config
         # - crash when loading run.out
         # - crash when loading run.err
         # - failure to update config
-        # - variable with choices
-        # - changing bool variable
-        # - "path" variable
-        # - variable with no type, should default to "str"
-        # - validation of JSON, dicts, lists, ints, floats
+        # - role without argument_specs.main
+        # - updating a role to drop a variable
         # - skipped task
         # - failed task
         # - run without any changes

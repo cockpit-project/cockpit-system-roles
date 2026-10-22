@@ -95,12 +95,16 @@ export class AppConfig {
         this.#file = file;
         this.#tag = tag;
         this.config = data as Config;
+        console.log("CONFIG", tag, JSON.stringify(this.config));
     }
 
     async modify(func: (old: Config) => Config) {
         // This will also call the watch callback, so if you await the
         // call to "modify", this.config is guaranteed to reflect the
         // changes.
+        const new_config = func(this.config);
+        console.log("CHANGE", JSON.stringify(this.config));
+        console.log("TO    ", JSON.stringify(new_config));
         await this.#file.replace(func(this.config), this.#tag);
     }
 }
@@ -147,7 +151,7 @@ export const useAppConfig = () => {
     return { config, error };
 };
 
-export async function update_variable(config: AppConfig, role: RoleConfig, name: string, value: string) {
+export async function update_variable(config: AppConfig, role: string, name: string, value: string) {
     function update_vars(vars: Record<string, VarConfig>) {
         if (value !== "")
             return {
@@ -162,13 +166,14 @@ export async function update_variable(config: AppConfig, role: RoleConfig, name:
     }
 
     function update_role(r: RoleConfig) {
-        if (Object.is(r, role))
+        if (r.name === role)
             return { ...r, vars: update_vars(r.vars) };
         else
             return r;
     }
 
     try {
+        console.log("UPDATE", role, name, JSON.stringify(value));
         await config.modify(
             conf => {
                 return {
@@ -177,6 +182,7 @@ export async function update_variable(config: AppConfig, role: RoleConfig, name:
                 };
             }
         );
+        console.log("UPDATE done", role, name, JSON.stringify(value));
     } catch (ex) {
         toaster.add_error(_("Failed to update the configuration"), ex);
     }

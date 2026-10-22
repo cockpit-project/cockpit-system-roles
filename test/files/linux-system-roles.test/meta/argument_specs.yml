@@ -23,3 +23,21 @@ argument_specs:
         default: world
         description:
           - A raw value with a string as the default
+      test_none:
+        description: A variable without type and default.
+      test_choices:
+        type: str
+        choices:
+          - green
+          - red
+          - yellow
+        default: green
+        description: A variable with choices.
+      test_path:
+        type: path
+        default: ""
+        description: A variable that is a path.
+      test_int:
+        type: int
+        default: 0
+        description: A integer.

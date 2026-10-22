@@ -278,7 +278,7 @@ export const EditVariable = ({
             if (has_default(spec) && JSON_parse_carefully(val) === spec.default)
                 val = "";
         }
-        await update_variable(config, role, name, val);
+        await update_variable(config, role.name, name, val);
     }
 
     let comp;
