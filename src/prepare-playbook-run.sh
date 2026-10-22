@@ -9,8 +9,6 @@ mkdir -p "$dir"
 cat >"$dir/playbook.json"
 
 cat >"$dir/run.sh" <<EOF
-#/bin/sh
-
 set -e
 cd "$dir"
 umask 077
