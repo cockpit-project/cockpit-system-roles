@@ -77,6 +77,33 @@ class TestSystemRoles(testlib.MachineCase):
         self.assertEqual(output["test_bool"], False)
 
         # -> more ideas from coverage
+        #
+        # - trying to add a rule twice
+        # - removing a rule
+        # - setting a variable back to its default -> disappears from config
+        # - variable without default
+        # - description that is not an array
+        # - role without argument_specs.main
+        # - updating a role to drop a variable
+        # - non-superuser
+        # - crash when loading system roles
+        # - crash when loading config
+        # - crash when loading run.out
+        # - crash when loading run.err
+        # - failure to update config
+        # - variable with choices
+        # - changing bool variable
+        # - "path" variable
+        # - variable with no type, should default to "str"
+        # - validation of JSON, dicts, lists, ints, floats
+        # - skipped task
+        # - failed task
+        # - run without any changes
+        # - check run without any needed changes
+        # - show all events
+        # - failed playbook execution toast
+        # - running after failure
+        # - cancelling a run
 
 
 if __name__ == '__main__':
