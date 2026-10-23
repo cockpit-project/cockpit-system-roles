@@ -115,8 +115,8 @@ export class AppConfig {
                 await this.#file.replace(func(this.config), this.#tag);
                 break;
             } catch (ex) {
-                console.log("FAILED", ex);
-                if (ex && typeof ex == "object" && "problem" in ex) {
+                console.log("FAILED", String(ex));
+                if (ex && typeof ex === "object" && "problem" in ex) {
                     console.log("PROBLEM", ex.problem);
                     if (ex.problem !== "change-conflict" || count > 100)
                         throw ex;
