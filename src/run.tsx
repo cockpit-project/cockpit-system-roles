@@ -142,44 +142,61 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
         results.push(<div key={results.length}>{elt}</div>);
     }
 
+    function expect_running_task(task: AnsibleEventTask) {
+        if (running_task && running_task.id === task.id)
+            return true;
+        console.warn(`Unexpected Ansible event sequence.  Task ${task.name} had no starting event.`);
+        return false;
+    }
+
+    function expect_no_running_task() {
+        if (running_task) {
+            console.warn(`Unexpected Ansible event sequence.  Task ${running_task.name} had no finishing event.`);
+            running_task = null;
+        }
+    }
+
     for (const event of events) {
         if (event._event === "cockpit_system_role_run_start") {
             check_mode = event.arguments.includes("--check");
             if (check_mode)
                 push(<i>{_("Drift check run")}</i>);
         } else if (event._event === "v2_playbook_on_play_start") {
-            cockpit.assert(!running_task);
+            expect_no_running_task();
             push(<b>{event.play.name}</b>);
         } else if (event._event === "v2_playbook_on_task_start" || event._event === "v2_playbook_on_handler_task_start") {
-            cockpit.assert(!running_task);
+            expect_no_running_task();
             running_task = event.task;
         } else if (event._event === "v2_runner_on_ok") {
-            cockpit.assert(running_task && running_task.id === event.task.id);
-            running_task = null;
-            if (event.hosts.localhost.changed) {
-                push(<>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</>);
-                if (event.hosts.localhost.msg)
-                    push(<>- {event.hosts.localhost.msg}</>);
-            } else if (show_all)
-                push(<>{event.task.name} {_("(no change)")}</>);
+            if (expect_running_task(event.task)) {
+                running_task = null;
+                if (event.hosts.localhost.changed) {
+                    push(<>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</>);
+                    if (event.hosts.localhost.msg)
+                        push(<>- {event.hosts.localhost.msg}</>);
+                } else if (show_all)
+                    push(<>{event.task.name} {_("(no change)")}</>);
+            }
         } else if (event._event === "v2_runner_on_skipped") {
-            cockpit.assert(running_task && running_task.id === event.task.id);
-            running_task = null;
-            if (show_all)
-                push(<>{event.task.name} {_("(skipped)")}</>);
+            if (expect_running_task(event.task)) {
+                running_task = null;
+                if (show_all)
+                    push(<>{event.task.name} {_("(skipped)")}</>);
+            }
         } else if (event._event === "v2_runner_on_failed") {
-            cockpit.assert(running_task && running_task.id === event.task.id);
-            running_task = null;
-            push(<>{event.task.name} {_("FAILED")}</>);
-            push(<>- {event.hosts.localhost.msg}</>);
-            if (event.hosts.localhost.results) {
-                for (const res of event.hosts.localhost.results) {
-                    if (res.failed)
-                        push(<>- {res.msg}</>);
+            if (expect_running_task(event.task)) {
+                running_task = null;
+                push(<>{event.task.name} {_("FAILED")}</>);
+                push(<>- {event.hosts.localhost.msg}</>);
+                if (event.hosts.localhost.results) {
+                    for (const res of event.hosts.localhost.results) {
+                        if (res.failed)
+                            push(<>- {res.msg}</>);
+                    }
                 }
             }
         } else if (event._event === "v2_playbook_on_stats") {
-            cockpit.assert(!running_task);
+            expect_no_running_task();
             push(<br />);
             const stats = event.stats.localhost;
             if (stats.changed !== 0) {
@@ -198,6 +215,8 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
                     push(_("Nothing interesting has happened."));
                 }
             }
+        } else {
+            console.warn(`Unexpected Ansible event sequence.  Event ${event._event} is unknown.`);
         }
     }
 
