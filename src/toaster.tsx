@@ -33,6 +33,7 @@ class Toaster extends EventEmitter<ToasterEvents> {
     }
 
     add_error(message: string, error: unknown) {
+        console.warn("Error:", String(error));
         this.add(message, String(error));
     }
 }
