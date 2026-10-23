@@ -105,7 +105,29 @@ export class AppConfig {
         const new_config = func(this.config);
         console.log("CHANGE", JSON.stringify(this.config));
         console.log("TO    ", JSON.stringify(new_config));
-        await this.#file.replace(func(this.config), this.#tag);
+        // XXX - this.#file.modify does the same, but we can't get TS
+        // to accept its weird multi-value promises.
+        let count = 0;
+        while (true) {
+            count += 1;
+            try {
+                console.log("TRY", count, this.#tag);
+                await this.#file.replace(func(this.config), this.#tag);
+                break;
+            } catch (ex) {
+                console.log("FAILED", ex);
+                if (ex && typeof ex == "object" && "problem" in ex) {
+                    console.log("PROBLEM", ex.problem);
+                    if (ex.problem !== "change-conflict" || count > 100)
+                        throw ex;
+                    // This will call the watch callback synchornously
+                    // and thus update this.config and this.#tag for
+                    // the next try.
+                    await this.#file.read();
+                } else
+                    throw ex;
+            }
+        }
     }
 }
 
