@@ -113,6 +113,7 @@ export class AppConfig {
             try {
                 console.log("TRY", count, this.#tag);
                 await this.#file.replace(func(this.config), this.#tag);
+                console.log("TRY succeeded", count);
                 break;
             } catch (ex) {
                 console.log("FAILED", String(ex));
@@ -207,6 +208,7 @@ export async function update_variable(config: AppConfig, role: string, name: str
         );
         console.log("UPDATE done", role, name, JSON.stringify(value));
     } catch (ex) {
+        console.log("UPDATE failed", role, name, JSON.stringify(value));
         toaster.add_error(_("Failed to update the configuration"), ex);
     }
 }
