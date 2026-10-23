@@ -82,6 +82,7 @@ export interface Config {
 export class AppConfig {
     #file: cockpit.FileHandle<unknown>;
     #tag: string;
+    #replace_promise: Promise<void> | null = null;
 
     config: Config;
 
@@ -112,7 +113,15 @@ export class AppConfig {
             count += 1;
             try {
                 console.log("TRY", count, this.#tag);
-                await this.#file.replace(func(this.config), this.#tag);
+                while (this.#replace_promise) {
+                    console.log("WAITING");
+                    await this.#replace_promise;
+                }
+                this.#replace_promise = (async () => {
+                    await this.#file.replace(func(this.config), this.#tag);
+                    this.#replace_promise = null;
+                })();
+                await this.#replace_promise;
                 console.log("TRY succeeded", count);
                 break;
             } catch (ex) {
