@@ -32,9 +32,24 @@ class TestSystemRoles(testlib.MachineCase):
 
         m.upload([ "files/linux-system-roles.test" ], "/usr/share/ansible/roles")
 
-        self.login_and_go("/system-roles")
+        self.login_and_go("/system-roles", superuser=False)
 
         b.wait_in_text("body", "Manage your system with Ansible and System Roles")
+
+        b.wait_in_text("body", "Administrative access needed.")
+        b.become_superuser()
+        b.wait_in_text("body", "Configured System Roles")
+
+        # Running without any roles is an error and puts up a
+        # toast. We want to test the toast here; eventually the UI
+        # should prevent running empty playbooks.
+
+        b.click("#playbook-run")
+        b.wait_in_text(".pf-v6-c-alert", "Playbook execution failed")
+        b.click(".pf-v6-c-alert button.more-button")
+        b.wait_in_text(".pf-v6-c-alert", "A playbook must contain at least one play")
+        b.click(".pf-v6-c-alert .pf-v6-c-alert__action button")
+        b.wait_not_present(".pf-v6-c-alert")
 
         # Add the "nbde_server" role
 
@@ -116,17 +131,26 @@ class TestSystemRoles(testlib.MachineCase):
         b.wait_not_in_text("#playbook-output",
                            "1 tasks have made changes")
 
-        # Set a couple other variables of various types
+        # Set a couple other variables of various types, and make some mistakes along the way
 
         b.set_checked(self.role_var_row("linux-system-roles.test", "test_bool") + " input", True)
         b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
+                         "[ { foo: \"bar\" } ]")
+        b.wait_in_text(self.role_var_row("linux-system-roles.test", "test_raw") + " .pf-v6-c-helper-text",
+                       "Must be valid JSON")
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
                          "[ { \"foo\": \"bar\" } ]")
+        b.wait_not_present(self.role_var_row("linux-system-roles.test", "test_raw") + ".pf-v6-c-helper-text")
         b.set_checked(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=checkbox]", True)
         b.set_input_text(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=text]", "world")
         b.select_PF(self.role_var_row("linux-system-roles.test", "test_choices") + " .pf-v6-c-menu-toggle",
                     "red")
         b.set_input_text(self.role_var_row("linux-system-roles.test", "test_path") + " input", "/etc")
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "twelve")
+        b.wait_in_text(self.role_var_row("linux-system-roles.test", "test_int") + " .pf-v6-c-helper-text",
+                       "Must be valid JSON")
         b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "12")
+        b.wait_not_present(self.role_var_row("linux-system-roles.test", "test_int") + " .pf-v6-c-helper-text")
 
         b.click("#playbook-run")
         b.wait_in_text("#playbook-output",
@@ -144,15 +168,15 @@ class TestSystemRoles(testlib.MachineCase):
 
         # -> more ideas from coverage
         #
-        # - validation of JSON, dicts, lists, ints, floats
+        # - non-superuser
         # - "str/choices" without default
         # - "bool" without default
         # - "path" without default
-        # - non-superuser
         # - crash when loading system roles
         # - crash when loading config
         # - crash when loading run.out
         # - crash when loading run.err
+        # - validation of JSON dicts, lists
         # - failure to update config
         # - role without argument_specs.main
         # - updating a role to drop a variable
@@ -162,7 +186,6 @@ class TestSystemRoles(testlib.MachineCase):
         # - run without any changes
         # - check run without any needed changes
         # - show all events
-        # - failed playbook execution toast
         # - running after failure
         # - cancelling a run
 
