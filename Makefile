@@ -198,8 +198,10 @@ prepare-check: $(NODE_MODULES_TEST) $(VM_IMAGE) test/common test/reference
 
 # run the browser integration tests
 # this will run all tests/check-* and format them as TAP
+# We hack NODE_ENV to production to run pixel tests because we
+# use fedora-44 for both coverage and pixels.
 check: prepare-check
-	test/common/run-tests ${RUN_TESTS_OPTIONS}
+	NODE_ENV=production test/common/run-tests ${RUN_TESTS_OPTIONS}
 
 codecheck: test/common $(NODE_MODULES_TEST)
 	test/common/static-code
