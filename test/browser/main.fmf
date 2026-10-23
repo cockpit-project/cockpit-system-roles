@@ -7,3 +7,12 @@ require:
   - cockpit-system
 test: ./browser.sh
 duration: 60m
+
+adjust:
+  - when: distro ~ centos
+    require+:
+      - rhel-system-roles
+
+  - when: distro !~ centos
+    require+:
+      - linux-system-roles
