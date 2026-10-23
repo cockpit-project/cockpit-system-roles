@@ -166,10 +166,11 @@ export async function update_variable(config: AppConfig, role: string, name: str
     }
 
     function update_role(r: RoleConfig) {
-        if (r.name === role)
+        if (r.name === role) {
             return { ...r, vars: update_vars(r.vars) };
-        else
+        } else {
             return r;
+        }
     }
 
     try {

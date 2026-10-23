@@ -183,18 +183,20 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
             push(<br />);
             const stats = event.stats.localhost;
             if (stats.changed !== 0) {
-                if (check_mode)
+                if (check_mode) {
                     push(cockpit.format(_("$0 tasks have reported differences between the desired and the actual state of the machine."), stats.changed));
-                else
+                } else {
                     push(cockpit.format(_("$0 tasks have made changes."), stats.changed));
+                }
             }
             if (stats.failures !== 0)
                 push(cockpit.format(_("$0 tasks have failed."), stats.failures));
             if (stats.changed === 0 && stats.failures === 0) {
-                if (check_mode)
+                if (check_mode) {
                     push(_("The machine is in the desired state."));
-                else
+                } else {
                     push(_("Nothing interesting has happened."));
+                }
             }
         }
     }
