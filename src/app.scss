@@ -1,2 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 @use "page";
+@use "ct-card.scss";
+
+// We don't want the cards to scroll internally.  The whole middle
+// section of the page should scroll.
+.pf-v6-c-card {
+    overflow: visible !important;
+}
