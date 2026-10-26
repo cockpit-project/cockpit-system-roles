@@ -3,19 +3,191 @@
 #
 # Copyright (C) 2026 Red Hat, Inc.
 
+import json
+
 import testlib
 
 
 @testlib.nondestructive
 class TestSystemRoles(testlib.MachineCase):
 
+    def role_row(self, role: str) -> str:
+        return f"#configured-roles tbody tr[data-role=\"{role}\"]"
+
+    def role_var_row(self, role: str, var: str) -> str:
+        return f"{self.role_row(role)} + tr table tr[data-var=\"{var}\"]"
+
+    def expand_role_row(self, name: str) -> None:
+        b = self.browser
+        sel = self.role_row(name)
+        isExpanded = 'pf-m-expanded' in b.attr(f"{sel} + tr", "class")
+
+        if not isExpanded:
+            b.click(f"{sel} .pf-v6-c-table__toggle button")
+            b.wait_visible(f"{sel} + tr.pf-m-expanded")
+
     def testBasic(self) -> None:
         b = self.browser
+        m = self.machine
 
-        self.login_and_go("/system-roles")
+        m.upload([ "files/linux-system-roles.test" ], "/usr/share/ansible/roles")
+
+        self.login_and_go("/system-roles", superuser=False)
 
         b.wait_in_text("body", "Manage your system with Ansible and System Roles")
-        b.assert_pixels("h2", "header")
+
+        b.wait_in_text("body", "Administrative access needed.")
+        b.become_superuser()
+        b.wait_in_text("body", "Configured System Roles")
+
+        # Running without any roles is an error and puts up a
+        # toast. We want to test the toast here; eventually the UI
+        # should prevent running empty playbooks.
+
+        b.click("#playbook-run")
+        b.wait_in_text(".pf-v6-c-alert", "Playbook execution failed")
+        b.click(".pf-v6-c-alert button.more-button")
+        b.wait_in_text(".pf-v6-c-alert", "A playbook must contain at least one play")
+        b.click(".pf-v6-c-alert .pf-v6-c-alert__action button")
+        b.wait_not_present(".pf-v6-c-alert")
+
+        # Add the "nbde_server" role
+
+        b.click("#add-role")
+        b.click("#add-role-modal tr:contains('linux-system-roles.nbde_server')")
+        b.wait_not_present("#add-role-modal")
+
+        # Add the "test" role, nbde_server should not be offered
+
+        b.click("#add-role")
+        b.wait_visible("#add-role-modal tr:contains('linux-system-roles.test')")
+        b.wait_not_present("#add-role-modal tr:contains('linux-system-roles.nbde_server')")
+        b.click("#add-role-modal tr:contains('linux-system-roles.test')")
+        b.wait_not_present("#add-role-modal")
+
+        # Remove "nbde_server"
+
+        b.click(self.role_row("linux-system-roles.nbde_server") + " button[data-remove]")
+        b.wait_not_present(self.role_row("linux-system-roles.nbde_server"))
+
+        # Expand "test" role, pixels
+
+        self.expand_role_row("linux-system-roles.test")
+        b.assert_pixels("#configured-roles", "role-variables")
+
+        # Change "str"
+
+        rvr = self.role_var_row("linux-system-roles.test", "test_str")
+        b.wait_val(rvr + " input", "hello")
+        b.set_input_text(rvr + " input", "Hi")
+
+        # Run check
+
+        b.click("#playbook-check")
+        b.wait_in_text("#playbook-output", "Drift check run")
+        b.wait_in_text("#playbook-output",
+                       "linux-system-roles.test : Record the parameters this role was invoked with CHANGES NEEDED")
+        b.wait_in_text("#playbook-output",
+                       "1 tasks have reported differences between the desired and the actual state of the machine.")
+
+        # Run real
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-output",
+                       "linux-system-roles.test : Record the parameters this role was invoked with CHANGED")
+        b.wait_in_text("#playbook-output",
+                       "1 tasks have made changes")
+
+        # Check file content
+
+        output = json.loads(m.execute("cat /tmp/test_output.json"))
+        self.assertEqual(output["test_str"], "Hi")
+        self.assertEqual(output["test_bool"], False)
+
+        # Artificially clear run.out so that the tests will pick up
+        # the next run correctly.
+
+        m.execute("rm /run/cockpit/system-roles/run.out")
+        b.wait_not_in_text("#playbook-output",
+                           "1 tasks have made changes")
+
+        # Set "test_str" back to default, it should disappear from the
+        # config (we do this for code coverage)
+
+        b.set_input_text(rvr + " input", "hello")
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-output",
+                       "1 tasks have made changes")
+
+        output = json.loads(m.execute("cat /tmp/test_output.json"))
+        self.assertEqual(output["test_str"], "hello")
+        self.assertEqual(output["test_bool"], False)
+
+        # Artificially clear run.out so that the tests will pick up
+        # the next run correctly.
+
+        m.execute("rm /run/cockpit/system-roles/run.out")
+        b.wait_not_in_text("#playbook-output",
+                           "1 tasks have made changes")
+
+        # Set a couple other variables of various types, and make some mistakes along the way
+
+        b.set_checked(self.role_var_row("linux-system-roles.test", "test_bool") + " input", True)
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
+                         "[ { foo: \"bar\" } ]")
+        b.wait_in_text(self.role_var_row("linux-system-roles.test", "test_raw") + " .pf-v6-c-helper-text",
+                       "Must be valid JSON")
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
+                         "[ { \"foo\": \"bar\" } ]")
+        b.wait_not_present(self.role_var_row("linux-system-roles.test", "test_raw") + ".pf-v6-c-helper-text")
+        b.set_checked(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=checkbox]", True)
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=text]", "world")
+        b.select_PF(self.role_var_row("linux-system-roles.test", "test_choices") + " .pf-v6-c-menu-toggle",
+                    "red")
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_path") + " input", "/etc")
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "twelve")
+        b.wait_in_text(self.role_var_row("linux-system-roles.test", "test_int") + " .pf-v6-c-helper-text",
+                       "Must be valid JSON")
+        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "12")
+        b.wait_not_present(self.role_var_row("linux-system-roles.test", "test_int") + " .pf-v6-c-helper-text")
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-output",
+                       "1 tasks have made changes")
+
+        playbook = json.loads(m.execute("cat /run/cockpit/system-roles/playbook.json"))
+
+        self.assertEqual(playbook[0]["name"], "linux-system-roles.test")
+        self.assertEqual(playbook[0]["vars"]["test_bool"], True)
+        self.assertEqual(playbook[0]["vars"]["test_none"], "world")
+        self.assertEqual(playbook[0]["vars"]["test_raw"], [ { "foo": "bar" } ])
+        self.assertEqual(playbook[0]["vars"]["test_choices"], "red")
+        self.assertEqual(playbook[0]["vars"]["test_path"], "/etc")
+        self.assertEqual(playbook[0]["vars"]["test_int"], 12)
+
+        # -> more ideas from coverage
+        #
+        # - non-superuser
+        # - "str/choices" without default
+        # - "bool" without default
+        # - "path" without default
+        # - crash when loading system roles
+        # - crash when loading config
+        # - crash when loading run.out
+        # - crash when loading run.err
+        # - validation of JSON dicts, lists
+        # - failure to update config
+        # - role without argument_specs.main
+        # - updating a role to drop a variable
+        # - removing system role completely
+        # - skipped task
+        # - failed task
+        # - run without any changes
+        # - check run without any needed changes
+        # - show all events
+        # - running after failure
+        # - cancelling a run
 
 
 if __name__ == '__main__':

@@ -1,0 +1,11 @@
+- name: Record the parameters this role was invoked with
+  ansible.builtin.copy:
+    content: |
+      {{
+        {
+          "test_str": test_str,
+          "test_bool": test_bool | bool,
+        } | to_nice_json
+      }}
+    dest: "/tmp/test_output.json"
+    mode: "0644"
