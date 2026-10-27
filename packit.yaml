@@ -33,8 +33,6 @@ jobs:
       - fedora-45
       - fedora-rawhide
       - fedora-latest-stable-aarch64
-      - centos-stream-9-x86_64
-      - centos-stream-10
 
   - job: copr_build
     trigger: pull_request
