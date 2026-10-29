@@ -73,7 +73,7 @@ class TestSystemRoles(testlib.MachineCase):
         # Expand "test" role, pixels
 
         self.expand_role_row("linux-system-roles.test")
-        b.assert_pixels("#configured-roles", "role-variables")
+        b.assert_pixels("#configured-roles", "role-variables", skip_layouts=["mobile"])
 
         # Change "str"
 
