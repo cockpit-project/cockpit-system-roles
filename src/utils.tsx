@@ -4,6 +4,7 @@
  * Copyright (C) 2026 Red Hat, Inc.
  */
 
+import cockpit from 'cockpit';
 import React, { useState, useEffect } from 'react';
 
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
@@ -11,9 +12,14 @@ import { Tbody, Tr, TrProps, Td, ExpandableRowContent } from '@patternfly/react-
 import { Dropdown } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
 import { MenuToggle } from '@patternfly/react-core/dist/esm/components/MenuToggle/index.js';
 import { EllipsisVIcon } from '@patternfly/react-icons';
+import { ExpandableSection, ExpandableSectionVariant } from '@patternfly/react-core/dist/esm/components/ExpandableSection';
+
+import Markdown from "markdown-to-jsx";
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
 import { useObject } from 'hooks';
+
+const _ = cockpit.gettext;
 
 export function shortenstart(prefix: string, val: string): string {
     if (val.startsWith(prefix))
@@ -265,4 +271,51 @@ export const KebabMenu = ({
             {children}
         </Dropdown>
     );
+};
+
+export const Description = ({
+    children
+} : {
+    children: string | string[] | undefined
+}) => {
+    const [showAll, setShowAll] = useState(false);
+
+    const options = {
+        overrides: {
+            a: {
+                props: {
+                    rel: "noopener noreferrer",
+                    target: "_blank",
+                },
+            },
+            // XXX - PatternFly messes with CSS so that for example
+            // <ul> doesn't get bullets. We probably need to configure
+            // Markdown to use PF text markup instead of the standard
+            // HTML one. Trying to undo PF CSS changes is the wrong
+            // approach.
+            ul: {
+                props: {
+                    style: { listStyle: "inside" },
+                }
+            }
+        },
+    };
+
+    if (children) {
+        const text = Array.isArray(children) ? children.join("\n\n") : children;
+        return (
+            <ExpandableSection
+                variant={ExpandableSectionVariant.truncate}
+                toggleTextCollapsed={_("Show more")}
+                toggleTextExpanded={_("Show less")}
+                onToggle={() => setShowAll(flag => !flag)}
+                truncateMaxLines={3}
+                isExpanded={showAll}
+            >
+                <Markdown options={options}>
+                    { text }
+                </Markdown>
+            </ExpandableSection>
+        );
+    }
 };
