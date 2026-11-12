@@ -94,10 +94,13 @@ class TestSystemRoles(testlib.MachineCase):
                        "linux-system-roles.test : Record the parameters this role was invoked with CHANGES NEEDED")
         b.wait_in_text("#playbook-output",
                        "1 tasks have reported differences between the desired and the actual state of the machine.")
+
         # Enable and then remove "nbde_server"
 
         b.set_checked(self.role_row("linux-system-roles.nbde_server") + " input[type=checkbox]", True)
-        b.click(self.role_row("linux-system-roles.nbde_server") + " button[data-remove]")
+        b.select_PF(self.role_row("linux-system-roles.nbde_server") + " button.pf-v6-c-menu-toggle", "Remove")
+        b.wait_in_text("#remove-role-modal", "Permanently remove system role nbde_server?")
+        b.click("#remove-role-modal button:contains('Remove role')")
         b.wait_not_present(self.role_row("linux-system-roles.nbde_server"))
 
         # Run real
