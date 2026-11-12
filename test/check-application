@@ -80,6 +80,14 @@ class TestSystemRoles(testlib.MachineCase):
         b.wait_text("#role-edit h3", "test")
         b.assert_pixels("#configured-roles", "role-variables", skip_layouts=["mobile"])
 
+        # Description for "test_str" should be truncated, but this
+        # happens via CSS and the only way we can observe this is via
+        # pixel texts.
+
+        b.click(self.role_var_row("test_str") + " button:contains('Show more')")
+        b.assert_pixels("#configured-roles", "role-variables-expanded", skip_layouts=["mobile"])
+        b.click(self.role_var_row("test_str") + " button:contains('Show less')")
+
         # Change "str"
 
         rvr = self.role_var_row("test_str")

@@ -21,9 +21,7 @@ import { Modal, ModalBody, ModalHeader, ModalFooter } from '@patternfly/react-co
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown';
 
-import Markdown from "markdown-to-jsx";
-
-import { shortenstart, KebabMenu, TwoResizableColumns } from "./utils";
+import { shortenstart, Description, KebabMenu, TwoResizableColumns } from "./utils";
 import { ToastArea } from "./toaster";
 import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role, enable_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
@@ -33,43 +31,6 @@ import { EditVariable } from "./edit";
 const _ = cockpit.gettext;
 
 superuser.reload_page_on_change();
-
-const Description = ({
-    children
-} : {
-    children: string | string[] | undefined
-}) => {
-    const options = {
-        overrides: {
-            a: {
-                props: {
-                    rel: "noopener noreferrer",
-                    target: "_blank",
-                },
-            },
-            // XXX - PatternFly messes with CSS so that for example
-            // <ul> doesn't get bullets. We probably need to configure
-            // Markdown to use PF text markup instead of the standard
-            // HTML one. Trying to undo PF CSS changes is the wrong
-            // approach.
-            ul: {
-                props: {
-                    style: { "list-style": "inside" },
-                }
-            }
-        },
-    };
-
-    if (children) {
-        return (
-            <Markdown options={options}>
-                { Array.isArray(children)
-                    ? children.join("\n\n")
-                    : children}
-            </Markdown>
-        );
-    }
-};
 
 const AddRoleDialog = ({
     config,
@@ -198,7 +159,9 @@ const VarRow = ({
                 />
             </div>
             <div className="ct-row-skip">
-                <Description>{spec.description}</Description>
+                <Description>
+                    {spec.description}
+                </Description>
             </div>
         </div>
     );
