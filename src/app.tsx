@@ -17,11 +17,13 @@ import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button';
 import { RhUiTrashIcon } from '@patternfly/react-icons';
-import { Modal, ModalBody, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal';
+import { Modal, ModalBody, ModalHeader, ModalFooter } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
+import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown';
+
 import Markdown from "markdown-to-jsx";
 
-import { shortenstart, TwoResizableColumns } from "./utils";
+import { shortenstart, KebabMenu, TwoResizableColumns } from "./utils";
 import { ToastArea } from "./toaster";
 import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role, enable_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
@@ -127,6 +129,54 @@ const AddRoleDialog = ({
     );
 };
 
+const RemoveRoleDialog = ({
+    config,
+    name,
+} : {
+    config: AppConfig,
+    name: string,
+}) => {
+    const Dialogs = useDialogs();
+
+    return (
+        <Modal
+            id="remove-role-modal"
+            isOpen
+            variant="medium"
+            position="top"
+            onClose={Dialogs.close}
+        >
+            <ModalHeader
+                title={cockpit.format(_("Permanently remove system role $0?"), shortenstart("linux-system-roles.", name))}
+                titleIconVariant="danger"
+            />
+            <ModalBody>
+                {_("Removing a system role will lose all its variable settings.")}
+            </ModalBody>
+            <ModalFooter>
+                <Button
+                    variant="danger"
+                    onClick={
+                        () => {
+                            // Error comes via a toast
+                            remove_role(config, name);
+                            Dialogs.close();
+                        }
+                    }
+                >
+                    {_("Remove role")}
+                </Button>
+                <Button
+                    variant="link"
+                    onClick={Dialogs.close}
+                >
+                    {_("Cancel")}
+                </Button>
+            </ModalFooter>
+        </Modal>
+    );
+};
+
 const VarRow = ({
     config,
     role,
@@ -208,6 +258,8 @@ const RoleRow = ({
     isSelected: boolean,
     onSelect: () => void,
 }) => {
+    const Dialogs = useDialogs();
+
     return (
         <Tr
             isSelectable
@@ -231,12 +283,22 @@ const RoleRow = ({
                 <b>{shortenstart("linux-system-roles.", role.name)}</b>
             </Td>
             <Td modifier="fitContent" hasAction>
-                <Button
-                    data-remove
-                    onClick={() => remove_role(config, role.name)}
-                    icon={<RhUiTrashIcon />}
-                    variant="plain"
-                />
+                <KebabMenu
+                    ariaLabel={_("Role menu")}
+                >
+                    <DropdownItem
+                        data-remove
+                        onClick={
+                            () => {
+                                Dialogs.show(<RemoveRoleDialog config={config} name={role.name} />);
+                            }
+                        }
+                        icon={<RhUiTrashIcon />}
+                        isDanger
+                    >
+                        {_("Remove")}
+                    </DropdownItem>
+                </KebabMenu>
             </Td>
         </Tr>
     );

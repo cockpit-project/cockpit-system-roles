@@ -8,8 +8,10 @@ import React, { useState, useEffect } from 'react';
 
 import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
-import { RhUiExternalLinkIcon } from '@patternfly/react-icons';
 import { Tbody, Tr, TrProps, Td, ExpandableRowContent } from '@patternfly/react-table';
+import { Dropdown } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
+import { MenuToggle } from '@patternfly/react-core/dist/esm/components/MenuToggle/index.js';
+import { RhUiExternalLinkIcon, EllipsisVIcon } from '@patternfly/react-icons';
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
 import { useObject } from 'hooks';
@@ -239,5 +241,40 @@ export const TwoResizableColumns = ({
                 {right}
             </div>
         </div>
+    );
+};
+
+export const KebabMenu = ({
+    ariaLabel,
+    children
+} : {
+    ariaLabel: string,
+    children: React.ReactNode
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <Dropdown
+            isOpen={isOpen}
+            onSelect={() => setIsOpen(false)}
+            onOpenChange={isOpen => setIsOpen(isOpen)}
+            aria-label={ariaLabel}
+            toggle={
+                ref => (
+                    <MenuToggle
+                        ref={ref}
+                        variant="plain"
+                        onClick={() => setIsOpen(!isOpen)}
+                        isExpanded={isOpen}
+                    >
+                        <EllipsisVIcon />
+                    </MenuToggle>
+                )
+            }
+            popperProps={{ position: "right" }}
+            shouldFocusToggleOnSelect
+        >
+            {children}
+        </Dropdown>
     );
 };
