@@ -346,6 +346,8 @@ export const EditVariable = ({
 
 export function validate_all(config: AppConfig, system_roles: SystemRoles): boolean {
     function validate_role(role: RoleConfig) {
+        if (!role.enabled)
+            return true;
         const system_role = system_roles[role.name];
         return Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).every(
             ([name, spec]) => {

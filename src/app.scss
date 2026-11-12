@@ -2,8 +2,39 @@
 @use "page";
 @use "ct-card.scss";
 
-// We don't want the cards to scroll internally.  The whole middle
-// section of the page should scroll.
+// We don't want the cards to scroll internally.  The whole page should scroll.
 .pf-v6-c-card {
     overflow: visible !important;
+}
+
+// Cards have big titles
+.pf-v6-c-card .pf-v6-c-card__title-text {
+  font-size: var(--pf-t--global--font--size--2xl)
+}
+
+// Resizable columms
+// TODO - make them actually resizable.
+
+.ct-resizable-columns {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+
+    & > .ct-resizable-left {
+        border-inline-end: solid var(--pf-t--global--border--color--default) 1px;
+        padding-inline: 1em;
+    }
+
+    & > .ct-resizable-right {
+        padding-inline: 1em;
+    }
+}
+
+// Typography helper for the "role variable editing panel"
+
+.ct-row-skip {
+    margin-block-start: 0.5em;
+}
+
+.ct-top-border {
+    border-block-start: solid var(--pf-t--global--border--color--default) 1px;
 }
