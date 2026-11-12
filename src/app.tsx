@@ -20,9 +20,11 @@ import { Button } from '@patternfly/react-core/dist/esm/components/Button';
 import { RhUiTrashIcon } from '@patternfly/react-icons';
 import { Modal, ModalBody, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
+import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown';
+
 import Markdown from "markdown-to-jsx";
 
-import { shortenstart } from "./utils";
+import { shortenstart, KebabMenu } from "./utils";
 import { ToastArea } from "./toaster";
 import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role, enable_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
@@ -231,12 +233,16 @@ const RoleRow = ({
                 <b>{shortenstart("linux-system-roles.", role.name)}</b>
             </Td>
             <Td modifier="fitContent" hasAction>
-                <Button
-                    data-remove
-                    onClick={() => remove_role(config, role.name)}
-                    icon={<RhUiTrashIcon />}
-                    variant="plain"
-                />
+                <KebabMenu>
+                    <DropdownItem
+                        data-remove
+                        onClick={() => remove_role(config, role.name)}
+                        icon={<RhUiTrashIcon />}
+                        isDanger
+                    >
+                        {_("Remove")}
+                    </DropdownItem>
+                </KebabMenu>
             </Td>
         </Tr>
     );
