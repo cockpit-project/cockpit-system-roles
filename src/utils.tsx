@@ -218,3 +218,26 @@ export const DebouncedFileChooserInput = ({
         />
     );
 };
+
+export const TwoResizableColumns = ({
+    children,
+} : {
+    children: React.ReactNode[],
+}) => {
+    const left = children[0];
+    const right = children.slice(1);
+
+    // TODO - Make this actually resizable.  For now we fix this at
+    // 1/3 left, 2/3 right, see app.css.
+
+    return (
+        <div className="ct-resizable-columns">
+            <div className="ct-resizable-left">
+                {left}
+            </div>
+            <div className="ct-resizable-right">
+                {right}
+            </div>
+        </div>
+    );
+};
