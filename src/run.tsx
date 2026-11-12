@@ -290,7 +290,7 @@ export const PlaybookRunner = ({
         await run_debouncers_now();
         if (!validate_all(config, system_roles))
             return null;
-        const roles = config.config.roles;
+        const roles = config.config.roles.filter(r => r.enabled);
         return roles.map(
             role => {
                 return {

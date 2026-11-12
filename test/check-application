@@ -14,10 +14,11 @@ class TestSystemRoles(testlib.MachineCase):
     def role_row(self, role: str) -> str:
         return f"#configured-roles tbody tr[data-role=\"{role}\"]"
 
-    def role_var_row(self, role: str, var: str) -> str:
-        return f"{self.role_row(role)} + tr table tr[data-var=\"{var}\"]"
+    def role_var_row(self, var: str) -> str:
+        return f"#role-edit [data-var=\"{var}\"]"
 
-    def expand_role_row(self, name: str) -> None:
+    def expand_play_row(self, name: str) -> None:
+        # XXX
         b = self.browser
         sel = self.role_row(name)
         isExpanded = 'pf-m-expanded' in b.attr(f"{sel} + tr", "class")
@@ -34,11 +35,10 @@ class TestSystemRoles(testlib.MachineCase):
 
         self.login_and_go("/system-roles", superuser=False)
 
-        b.wait_in_text("body", "Manage your system with Ansible and System Roles")
-
         b.wait_in_text("body", "Administrative access needed.")
+        b.wait_not_present("#configured-roles")
         b.become_superuser()
-        b.wait_in_text("body", "Configured System Roles")
+        b.wait_visible("#configured-roles")
 
         # Running without any roles is an error and puts up a
         # toast. We want to test the toast here; eventually the UI
@@ -65,19 +65,32 @@ class TestSystemRoles(testlib.MachineCase):
         b.click("#add-role-modal tr:contains('linux-system-roles.test')")
         b.wait_not_present("#add-role-modal")
 
-        # Remove "nbde_server"
+        # Switch between roles
 
-        b.click(self.role_row("linux-system-roles.nbde_server") + " button[data-remove]")
-        b.wait_not_present(self.role_row("linux-system-roles.nbde_server"))
+        b.wait_text("#role-edit h2", "nbde_server")
+        b.click(self.role_row("linux-system-roles.test") + " td:nth-child(2)")
+        b.wait_text("#role-edit h2", "test")
 
-        # Expand "test" role, pixels
+        # Disable "nbde_server"
 
-        self.expand_role_row("linux-system-roles.test")
+        b.set_checked(self.role_row("linux-system-roles.nbde_server") + " input[type=checkbox]", False)
+
+        # "test" role should still be selected, pixels
+
+        b.wait_text("#role-edit h2", "test")
         b.assert_pixels("#configured-roles", "role-variables", skip_layouts=["mobile"])
+
+        # Description for "test_str" should be truncated, but this
+        # happens via CSS and the only way we can observe this is via
+        # pixel texts.
+
+        b.click(self.role_var_row("test_str") + " button:contains('Show more')")
+        b.assert_pixels("#configured-roles", "role-variables-expanded", skip_layouts=["mobile"])
+        b.click(self.role_var_row("test_str") + " button:contains('Show less')")
 
         # Change "str"
 
-        rvr = self.role_var_row("linux-system-roles.test", "test_str")
+        rvr = self.role_var_row("test_str")
         b.wait_val(rvr + " input", "hello")
         b.set_input_text(rvr + " input", "Hi")
 
@@ -89,6 +102,14 @@ class TestSystemRoles(testlib.MachineCase):
                        "linux-system-roles.test : Record the parameters this role was invoked with CHANGES NEEDED")
         b.wait_in_text("#playbook-output",
                        "1 tasks have reported differences between the desired and the actual state of the machine.")
+
+        # Enable and then remove "nbde_server"
+
+        b.set_checked(self.role_row("linux-system-roles.nbde_server") + " input[type=checkbox]", True)
+        b.select_PF(self.role_row("linux-system-roles.nbde_server") + " button.pf-v6-c-menu-toggle", "Remove")
+        b.wait_in_text("#remove-role-modal", "Permanently remove system role nbde_server?")
+        b.click("#remove-role-modal button:contains('Remove role')")
+        b.wait_not_present(self.role_row("linux-system-roles.nbde_server"))
 
         # Run real
 
@@ -133,24 +154,19 @@ class TestSystemRoles(testlib.MachineCase):
 
         # Set a couple other variables of various types, and make some mistakes along the way
 
-        b.set_checked(self.role_var_row("linux-system-roles.test", "test_bool") + " input", True)
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
-                         "[ { foo: \"bar\" } ]")
-        b.wait_in_text(self.role_var_row("linux-system-roles.test", "test_raw") + " .pf-v6-c-helper-text",
-                       "Must be valid JSON")
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
-                         "[ { \"foo\": \"bar\" } ]")
-        b.wait_not_present(self.role_var_row("linux-system-roles.test", "test_raw") + ".pf-v6-c-helper-text")
-        b.set_checked(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=checkbox]", True)
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=text]", "world")
-        b.select_PF(self.role_var_row("linux-system-roles.test", "test_choices") + " .pf-v6-c-menu-toggle",
-                    "red")
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_path") + " input", "/etc")
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "twelve")
-        b.wait_in_text(self.role_var_row("linux-system-roles.test", "test_int") + " .pf-v6-c-helper-text",
-                       "Must be valid JSON")
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "12")
-        b.wait_not_present(self.role_var_row("linux-system-roles.test", "test_int") + " .pf-v6-c-helper-text")
+        b.set_checked(self.role_var_row("test_bool") + " input", True)
+        b.set_input_text(self.role_var_row("test_raw") + " input", "[ { foo: \"bar\" } ]")
+        b.wait_in_text(self.role_var_row("test_raw") + " .pf-v6-c-helper-text", "Must be valid JSON")
+        b.set_input_text(self.role_var_row("test_raw") + " input", "[ { \"foo\": \"bar\" } ]")
+        b.wait_not_present(self.role_var_row("test_raw") + ".pf-v6-c-helper-text")
+        b.set_checked(self.role_var_row("test_none") + " input[type=checkbox]", True)
+        b.set_input_text(self.role_var_row("test_none") + " input[type=text]", "world")
+        b.select_PF(self.role_var_row("test_choices") + " .pf-v6-c-menu-toggle", "red")
+        b.set_input_text(self.role_var_row("test_path") + " input", "/etc")
+        b.set_input_text(self.role_var_row("test_int") + " input", "twelve")
+        b.wait_in_text(self.role_var_row("test_int") + " .pf-v6-c-helper-text", "Must be valid JSON")
+        b.set_input_text(self.role_var_row("test_int") + " input", "12")
+        b.wait_not_present(self.role_var_row("test_int") + " .pf-v6-c-helper-text")
 
         b.click("#playbook-run")
         b.wait_in_text("#playbook-output",

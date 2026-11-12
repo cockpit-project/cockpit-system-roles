@@ -72,6 +72,7 @@ export interface VarConfig {
 
 export interface RoleConfig {
     name: string;
+    enabled: boolean;
     vars: Record<string, VarConfig>;
 }
 
@@ -215,7 +216,7 @@ export async function update_variable(config: AppConfig, role: string, name: str
 
 export async function add_role(config: AppConfig, name: string) {
     try {
-        await config.modify(conf => ({ ...conf, roles: [...conf.roles, { name, vars: {} }] }));
+        await config.modify(conf => ({ ...conf, roles: [...conf.roles, { name, enabled: true, vars: {} }] }));
     } catch (ex) {
         toaster.add_error(_("Failed to add role"), ex);
     }
@@ -233,5 +234,20 @@ export async function remove_role(config: AppConfig, name: string) {
         );
     } catch (ex) {
         toaster.add_error(_("Failed to remove role"), ex);
+    }
+}
+
+export async function enable_role(config: AppConfig, name: string, enabled: boolean) {
+    try {
+        await config.modify(
+            conf => {
+                return {
+                    ...conf,
+                    roles: conf.roles.map(r => r.name === name ? { ...r, enabled } : r)
+                };
+            }
+        );
+    } catch (ex) {
+        toaster.add_error(_("Failed to update the configuration"), ex);
     }
 }
