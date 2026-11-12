@@ -36,10 +36,14 @@ const _ = cockpit.gettext;
 superuser.reload_page_on_change();
 
 const Description = ({
+    max_length,
     children
 } : {
+    max_length?: number,
     children: string | string[] | undefined
 }) => {
+    const [showAll, setShowAll] = useState(false);
+
     const options = {
         overrides: {
             a: {
@@ -62,12 +66,50 @@ const Description = ({
     };
 
     if (children) {
+        const text = Array.isArray(children) ? children.join("\n\n") : children;
+        let displayed_text;
+        let show_more_button = false;
+        let show_less_button = false;
+        if (max_length && text.length > max_length) {
+            if (!showAll) {
+                displayed_text = text.substring(0, max_length - 5) + "...";
+                show_more_button = true;
+            } else {
+                displayed_text = text;
+                show_less_button = true;
+            }
+        } else {
+            displayed_text = text;
+        }
         return (
-            <Markdown options={options}>
-                { Array.isArray(children)
-                    ? children.join("\n\n")
-                    : children}
-            </Markdown>
+            <>
+                <Markdown options={options}>
+                    { displayed_text }
+                </Markdown>
+                {
+                    show_more_button &&
+                        <>
+                            {"\n"}
+                            <Button
+                                isInline
+                                variant="link"
+                                onClick={() => setShowAll(true)}
+                            >
+                                {_("Show more")}
+                            </Button>
+                        </>
+                }
+                {
+                    show_less_button &&
+                        <Button
+                            isInline
+                            variant="link"
+                            onClick={() => setShowAll(false)}
+                        >
+                            {_("Show less")}
+                        </Button>
+                }
+            </>
         );
     }
 };
@@ -157,7 +199,9 @@ const VarRow = ({
                 />
             </div>
             <div style={{ marginBlock: "0.5em" }}>
-                <Description>{spec.description}</Description>
+                <Description max_length={500}>
+                    {spec.description}
+                </Description>
             </div>
         </div>
     );
