@@ -28,7 +28,7 @@ import { shortenstart, KebabMenu } from "./utils";
 import { ToastArea } from "./toaster";
 import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role, enable_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
-import { PlaybookOutput, PlaybookRunner } from "./run";
+import { PlaybookExecution } from "./run";
 import { EditVariable } from "./edit";
 
 const _ = cockpit.gettext;
@@ -415,7 +415,7 @@ const MainSection = ({
     return (
         <>
             <ConfiguredRoles config={config} roles={roles} />
-            <PlaybookOutput />
+            <PlaybookExecution config={config} system_roles={roles} />
         </>
     );
 };
@@ -435,15 +435,6 @@ export const Application = () => {
                         roles={roles}
                         roles_error={roles_error}
                     />
-                </PageSection>
-                <PageSection hasBodyWrapper={false}>
-                    {
-                        superuser.allowed && config && roles &&
-                            <PlaybookRunner
-                                config={config}
-                                system_roles={roles}
-                            />
-                    }
                 </PageSection>
             </Page>
         </WithDialogs>

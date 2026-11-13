@@ -8,17 +8,22 @@ import cockpit from 'cockpit';
 import React, { useReducer, useState, useEffect, useRef } from 'react';
 import { useInit } from "hooks";
 import { LongRunningProcess, ProcessState } from "long-running-process";
+import { superuser } from "superuser";
 
+import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Flex, FlexItem } from '@patternfly/react-core/dist/esm/layouts/Flex';
+import { Label, LabelColor, LabelStatus } from '@patternfly/react-core/dist/esm/components/Label';
+import { Icon }from '@patternfly/react-core/dist/esm/components/Icon';
+import { PlayIcon, StopIcon, StethoscopeIcon } from '@patternfly/react-icons';
 
 import { toaster } from "./toaster";
 import { AppConfig } from "./config";
-import { run_debouncers_now } from "./utils";
+import { run_debouncers_now, ExpandableTr, shortenstart } from "./utils";
 import { SystemRoles } from "./roles";
 import { validate_all } from "./edit";
 
@@ -133,13 +138,25 @@ export const useAnsibleEvents = () => {
     return { events, error };
 };
 
-function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
+function render_ansible_events(events: AnsibleEvent[], expected_plays: string[]) {
     let check_mode: boolean = false;
-    let running_task: AnsibleEventTask | null = null;
-    const results: React.ReactNode[] = [];
 
-    function push(elt: React.ReactNode) {
-        results.push(<div key={results.length}>{elt}</div>);
+    interface PlayData {
+        summary: React.ReactNode,
+        tasks: React.ReactNode,
+    };
+
+    const plays = new Map<string, PlayData>();
+    let running_play: string | null = null;
+    let running_task: AnsibleEventTask | null = null;
+
+    let tasks: React.ReactNode[] = [];
+    let tasks_changed: number = 0;
+    let tasks_failed: number = 0;
+    let stats_row: React.ReactNode = null;
+
+    function push_task(elt: React.ReactNode) {
+        tasks.push(<div key={tasks.length}>{elt}</div>);
     }
 
     function expect_running_task(task: AnsibleEventTask) {
@@ -156,14 +173,43 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
         }
     }
 
+    function finish_play() {
+        if (running_task)
+            push_task(<>{running_task.name} <Spinner isInline /></>);
+        if (running_play) {
+            let summary;
+            if (running_task)
+                summary = <Label variant="outline" color={LabelColor.grey} icon={<Spinner isInline/>}>{_("Running")}</Label>;
+            else if (tasks_failed)
+                summary = <Label variant="outline" status={LabelStatus.danger}>{_("Failed")}</Label>;
+            else if (tasks_changed)
+                summary = <Label variant="outline" status={LabelStatus.warning}>{_("Made changes")}</Label>;
+            else
+                summary = <Label variant="outline" status={LabelStatus.success}>{_("Done")}</Label>;
+
+            plays.set(running_play, { summary, tasks });
+            running_play = null;
+            tasks = [];
+            tasks_changed = 0;
+            tasks_failed = 0;
+        }
+    }
+
+    function start_play(play: string) {
+        expect_no_running_task();
+        finish_play();
+        running_play = play;
+    }
+
+    // HACK - avoids some flicker
+    if (events.length < 2)
+        return null;
+
     for (const event of events) {
         if (event._event === "cockpit_system_role_run_start") {
             check_mode = event.arguments.includes("--check");
-            if (check_mode)
-                push(<i>{_("Drift check run")}</i>);
         } else if (event._event === "v2_playbook_on_play_start") {
-            expect_no_running_task();
-            push(<b>{event.play.name}</b>);
+            start_play(event.play.name);
         } else if (event._event === "v2_playbook_on_task_start" || event._event === "v2_playbook_on_handler_task_start") {
             expect_no_running_task();
             running_task = event.task;
@@ -171,82 +217,135 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
             if (expect_running_task(event.task)) {
                 running_task = null;
                 if (event.hosts.localhost.changed) {
-                    push(<>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</>);
+                    tasks_changed += 1;
+                    push_task(<>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</>);
                     if (event.hosts.localhost.msg)
-                        push(<>- {event.hosts.localhost.msg}</>);
-                } else if (show_all)
-                    push(<>{event.task.name} {_("(no change)")}</>);
+                        push_task(<>- {event.hosts.localhost.msg}</>);
+                } else
+                    push_task(<>{event.task.name} {_("(no change)")}</>);
             }
         } else if (event._event === "v2_runner_on_skipped") {
             if (expect_running_task(event.task)) {
                 running_task = null;
-                if (show_all)
-                    push(<>{event.task.name} {_("(skipped)")}</>);
+                push_task(<>{event.task.name} {_("(skipped)")}</>);
             }
         } else if (event._event === "v2_runner_on_failed") {
             if (expect_running_task(event.task)) {
                 running_task = null;
-                push(<>{event.task.name} {_("FAILED")}</>);
-                push(<>- {event.hosts.localhost.msg}</>);
+                tasks_failed += 1;
+                push_task(<>{event.task.name} {_("FAILED")}</>);
+                push_task(<>- {event.hosts.localhost.msg}</>);
                 if (event.hosts.localhost.results) {
                     for (const res of event.hosts.localhost.results) {
                         if (res.failed)
-                            push(<>- {res.msg}</>);
+                            push_task(<>- {res.msg}</>);
                     }
                 }
             }
         } else if (event._event === "v2_playbook_on_stats") {
             expect_no_running_task();
-            push(<br />);
+            finish_play();
             const stats = event.stats.localhost;
-            if (stats.changed !== 0) {
-                if (check_mode) {
-                    push(cockpit.format(_("$0 tasks have reported differences between the desired and the actual state of the machine."), stats.changed));
-                } else {
-                    push(cockpit.format(_("$0 tasks have made changes."), stats.changed));
-                }
+
+            let summary;
+            if (stats.failures)
+                summary = <Label status={LabelStatus.danger}>{_("Failed")}</Label>;
+            else if (stats.changed)
+                summary = <Label status={LabelStatus.warning}>{_("Changes have been made")}</Label>;
+            else
+                summary = <Label status={LabelStatus.success}>{_("Success")}</Label>;
+
+            function stat_label(n: number, color: LabelColor, fmt: string) {
+                if (n)
+                    return (
+                        <Label
+                            variant="outline"
+                            color={color}
+                        >
+                            {cockpit.format(fmt, n)}
+                        </Label>
+                    );
             }
-            if (stats.failures !== 0)
-                push(cockpit.format(_("$0 tasks have failed."), stats.failures));
-            if (stats.changed === 0 && stats.failures === 0) {
-                if (check_mode) {
-                    push(_("The machine is in the desired state."));
-                } else {
-                    push(_("Nothing interesting has happened."));
-                }
-            }
+
+            stats_row = (
+                <>
+                    {summary}
+                    {"\n"}
+                    {stat_label(stats.failures, LabelColor.red, _("$0 failed"))}
+                    {stat_label(stats.changed, LabelColor.yellow, _("$0 changes"))}
+                    {stat_label(stats.skipped, LabelColor.blue, _("$0 skipped"))}
+                    {stat_label(stats.ok, LabelColor.green, _("$0 ok"))}
+                </>
+            );
         } else {
             console.warn(`Unexpected Ansible event sequence.  Event ${event._event} is unknown.`);
         }
     }
 
-    if (running_task)
-        push(<>{running_task.name} <Spinner isInline /></>);
+    const running = !!running_play;
+    finish_play();
 
-    return results;
+    let rows = [];
+    for (const play of expected_plays) {
+        const data = plays.get(play);
+        rows.push(
+            <ExpandableTr
+                key={rows.length}
+                expandableContent={data ? data.tasks : null}
+                rowIndex={rows.length}
+            >
+                <Td modifier="fitContent">
+                    {
+                        data
+                            ? data.summary
+                            : (
+                                running
+                                    ? null
+                                    : <Label variant="outline" color={LabelColor.grey}>{_("Not applied")}</Label>
+                            )
+                    }
+                </Td>
+                <Td><b>{shortenstart("linux-system-roles.", play)}</b></Td>
+            </ExpandableTr>
+        );
+    }
+
+    return (
+        <Table isExpandable>
+            <Tbody>
+                <Tr>
+                    <Td colSpan={3}>
+                        {stats_row || (running && <Label color={LabelColor.grey} icon={<Spinner isInline/>}>{_("Running")}</Label>)}
+                    </Td>
+                </Tr>
+                {rows}
+            </Tbody>
+        </Table>
+    );
 }
 
-export const PlaybookOutput = () => {
-    const [showAll, setShowAll] = useState(false);
+export const PlaybookExecution = ({
+    config,
+    system_roles,
+} : {
+    config: AppConfig,
+    system_roles: SystemRoles,
+}) => {
     const { events, error } = useAnsibleEvents();
 
-    const actions = (
-        <Switch
-            label={_("Show all execution steps")}
-            isChecked={showAll}
-            onChange={(_event, val) => setShowAll(val)}
-        />
-    );
+    const actions = superuser.allowed && <PlaybookRunner config={config} system_roles={system_roles} />;
 
     return (
         <Card id="playbook-output">
             <CardHeader actions={{ actions }}>
                 <CardTitle>{_("Playbook execution")}</CardTitle>
             </CardHeader>
-            <CardBody>
-                { error ? cockpit.format(_("Can't load playbook events: $0"), String(error)) : null }
-                { events && render_ansible_events(events, showAll) }
-            </CardBody>
+            { !!error &&
+                <CardBody>
+                    {cockpit.format(_("Can't load playbook events: $0"), String(error))}
+                </CardBody>
+            }
+            { events && render_ansible_events(events, config.config.roles.map(r => r.name)) }
         </Card>
     );
 };
@@ -273,7 +372,8 @@ export const PlaybookRunner = ({
                     if (pr.state === ProcessState.FAILED && prev !== ProcessState.FAILED) {
                         try {
                             const err = await cockpit.file("/run/cockpit/system-roles/run.err", { superuser: "require" }).read();
-                            toaster.add(_("Playbook execution failed"), err);
+                            if (err)
+                                toaster.add(_("Playbook execution failed"), err);
                         } catch (ex) {
                             toaster.add(_("Playbook execution failed"), cockpit.format(_("Can't access error: $0"), String(ex)));
                         }
@@ -331,45 +431,33 @@ export const PlaybookRunner = ({
     }
 
     let actions;
-    if (process.state === ProcessState.INIT)
-        actions = <Spinner />;
-    else if (process.state === ProcessState.STOPPED)
+    if (process.state === ProcessState.STOPPED)
         actions = (
-            <Flex>
-                <FlexItem>
-                    <Button
-                        id="playbook-run"
-                        onClick={() => run(false)}
-                        variant="danger"
-                        isDisabled={!valid}
-                    >
-                        {_("Apply the configuration to the local machine")}
-                    </Button>
-                </FlexItem>
-                <FlexItem>
-                    <Button
-                        id="playbook-check"
-                        onClick={() => run(true)}
-                        variant="secondary"
-                        isDisabled={!valid}
-                    >
-                        {_("Check whether any changes are necessary")}
-                    </Button>
-                </FlexItem>
-            </Flex>
+            <>
+                <Button
+                    id="playbook-run"
+                    onClick={() => run(false)}
+                    isDisabled={!valid}
+                    variant="plain"
+                    icon={<PlayIcon />}
+                />
+                <Button
+                    id="playbook-check"
+                    onClick={() => run(true)}
+                    isDisabled={!valid}
+                    variant="plain"
+                    icon={<StethoscopeIcon />}
+                />
+            </>
         );
     else if (process.state === ProcessState.RUNNING)
         actions = (
             <Button
                 onClick={terminate}
-            >
-                {_("Stop")}
-            </Button>
+                variant="plain"
+                icon={<StopIcon />}
+            />
         );
 
-    return (
-        <Bullseye>
-            {actions}
-        </Bullseye>
-    );
+    return actions;
 };
