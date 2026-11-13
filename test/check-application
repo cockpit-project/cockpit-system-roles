@@ -17,12 +17,16 @@ class TestSystemRoles(testlib.MachineCase):
     def role_var_row(self, var: str) -> str:
         return f"#role-edit [data-var=\"{var}\"]"
 
-    def expand_play_row(self, name: str) -> None:
-        # XXX
-        b = self.browser
-        sel = self.role_row(name)
-        isExpanded = 'pf-m-expanded' in b.attr(f"{sel} + tr", "class")
+    def play_row(self, play: str) -> str:
+        return f"#playbook-execution tbody tr[data-play=\"{play}\"]"
 
+    def play_tasks(self, play: str) -> str:
+        return f"#playbook-execution tbody tr[data-play=\"{play}\"] + tr"
+
+    def expand_play_row(self, name: str) -> None:
+        b = self.browser
+        sel = self.play_row(name)
+        isExpanded = 'pf-m-expanded' in b.attr(f"{sel} + tr", "class")
         if not isExpanded:
             b.click(f"{sel} .pf-v6-c-table__toggle button")
             b.wait_visible(f"{sel} + tr.pf-m-expanded")
@@ -97,11 +101,11 @@ class TestSystemRoles(testlib.MachineCase):
         # Run check
 
         b.click("#playbook-check")
-        b.wait_in_text("#playbook-output", "Drift check run")
-        b.wait_in_text("#playbook-output",
-                       "linux-system-roles.test : Record the parameters this role was invoked with CHANGES NEEDED")
-        b.wait_in_text("#playbook-output",
-                       "1 tasks have reported differences between the desired and the actual state of the machine.")
+        b.wait_in_text("#playbook-execution", "Changes need to be made")
+        self.expand_play_row("linux-system-roles.test")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "linux-system-roles.test : Record the parameters this role was invoked withchanges")
+        b.wait_not_present(self.play_row("linux-system-roles.nbde_server"))
 
         # Enable and then remove "nbde_server"
 
@@ -114,10 +118,11 @@ class TestSystemRoles(testlib.MachineCase):
         # Run real
 
         b.click("#playbook-run")
-        b.wait_in_text("#playbook-output",
-                       "linux-system-roles.test : Record the parameters this role was invoked with CHANGED")
-        b.wait_in_text("#playbook-output",
-                       "1 tasks have made changes")
+        b.wait_in_text("#playbook-execution", "Changes have been made")
+        self.expand_play_row("linux-system-roles.test")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "linux-system-roles.test : Record the parameters this role was invoked withchanges")
+        b.assert_pixels("#playbook-execution", "run-with-changes", skip_layouts=["mobile"])
 
         # Check file content
 
@@ -129,8 +134,7 @@ class TestSystemRoles(testlib.MachineCase):
         # the next run correctly.
 
         m.execute("rm /run/cockpit/system-roles/run.out")
-        b.wait_not_in_text("#playbook-output",
-                           "1 tasks have made changes")
+        b.wait_not_in_text("#playbook-execution", "Changes have been made")
 
         # Set "test_str" back to default, it should disappear from the
         # config (we do this for code coverage)
@@ -138,8 +142,7 @@ class TestSystemRoles(testlib.MachineCase):
         b.set_input_text(rvr + " input", "hello")
 
         b.click("#playbook-run")
-        b.wait_in_text("#playbook-output",
-                       "1 tasks have made changes")
+        b.wait_in_text("#playbook-execution", "Changes have been made")
 
         output = json.loads(m.execute("cat /tmp/test_output.json"))
         self.assertEqual(output["test_str"], "hello")
@@ -149,8 +152,7 @@ class TestSystemRoles(testlib.MachineCase):
         # the next run correctly.
 
         m.execute("rm /run/cockpit/system-roles/run.out")
-        b.wait_not_in_text("#playbook-output",
-                           "1 tasks have made changes")
+        b.wait_not_in_text("#playbook-execution", "Changes have been made")
 
         # Set a couple other variables of various types, and make some mistakes along the way
 
@@ -169,8 +171,7 @@ class TestSystemRoles(testlib.MachineCase):
         b.wait_not_present(self.role_var_row("test_int") + " .pf-v6-c-helper-text")
 
         b.click("#playbook-run")
-        b.wait_in_text("#playbook-output",
-                       "1 tasks have made changes")
+        b.wait_in_text("#playbook-execution", "Changes have been made")
 
         playbook = json.loads(m.execute("cat /run/cockpit/system-roles/playbook.json"))
 
@@ -182,9 +183,32 @@ class TestSystemRoles(testlib.MachineCase):
         self.assertEqual(playbook[0]["vars"]["test_path"], "/etc")
         self.assertEqual(playbook[0]["vars"]["test_int"], 12)
 
+        # Make the playbook fail
+
+        b.set_checked(self.role_var_row("test_fail") + " input", True)
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-execution", "Failed")
+        self.expand_play_row("linux-system-roles.test")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "linux-system-roles.test : Fail on purposefailed")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "- The test role was asked to fail via test_fail")
+        b.assert_pixels("#playbook-execution", "run-failed", skip_layouts=["mobile"])
+
+        # Failures due to tasks should not pop up a toast.
+        b.wait_not_present(".pf-v6-c-alert")
+
+        # Run it again without the flag. No changes should be made
+
+        b.set_checked(self.role_var_row("test_fail") + " input", False)
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-execution", "Success")
+        b.assert_pixels("#playbook-execution", "run-success", skip_layouts=["mobile"])
+
         # -> more ideas from coverage
         #
-        # - non-superuser
         # - "str/choices" without default
         # - "bool" without default
         # - "path" without default
@@ -198,11 +222,7 @@ class TestSystemRoles(testlib.MachineCase):
         # - updating a role to drop a variable
         # - removing system role completely
         # - skipped task
-        # - failed task
-        # - run without any changes
         # - check run without any needed changes
-        # - show all events
-        # - running after failure
         # - cancelling a run
 
 

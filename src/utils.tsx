@@ -8,6 +8,7 @@ import cockpit from 'cockpit';
 import React, { useState, useEffect } from 'react';
 
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
+import { Tooltip, TooltipPosition } from "@patternfly/react-core/dist/esm/components/Tooltip/index.js";
 import { Tbody, Tr, TrProps, Td, ExpandableRowContent } from '@patternfly/react-table';
 import { Dropdown } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
 import { MenuToggle } from '@patternfly/react-core/dist/esm/components/MenuToggle/index.js';
@@ -318,4 +319,27 @@ export const Description = ({
             </ExpandableSection>
         );
     }
+};
+
+export const WithExcuse = ({
+    id,
+    excuse,
+    children,
+} : {
+    id: string,
+    excuse: string | undefined | false | null,
+    children: React.ReactElement,
+}) => {
+    if (!excuse)
+        return children;
+
+    return (
+        <Tooltip
+            id={id}
+            content={excuse}
+            position={TooltipPosition.top}
+        >
+            {children}
+        </Tooltip>
+    );
 };
