@@ -10,6 +10,9 @@ import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
 import { RhUiExternalLinkIcon } from '@patternfly/react-icons';
 import { Tbody, Tr, TrProps, Td, ExpandableRowContent } from '@patternfly/react-table';
+import { Dropdown } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
+import { MenuToggle } from '@patternfly/react-core/dist/esm/components/MenuToggle/index.js';
+import { EllipsisVIcon } from '@patternfly/react-icons';
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
 import { useObject } from 'hooks';
@@ -217,4 +220,37 @@ export const DebouncedFileChooserInput = ({
             fileChooserProps={fileChooserProps}
         />
     );
+};
+
+export const KebabMenu = ({ children } : { children: React.ReactNode }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const onToggleClick = (event) => {
+        setIsOpen(!isOpen);
+    };
+
+    const onSelect = (event) => {
+        setIsOpen(false);
+    };
+
+    const toggle = ref => (
+        <MenuToggle
+            ref={ref}
+            variant="plain"
+            onClick={onToggleClick}
+            isExpanded={isOpen}
+        >
+            <EllipsisVIcon />
+        </MenuToggle>
+    );
+
+    return (
+        <Dropdown isOpen={isOpen}
+                  onSelect={onSelect}
+                  onOpenChange={isOpen => setIsOpen(isOpen)}
+                  toggle={toggle}
+                  popperProps={{ position: "right" }}
+                  shouldFocusToggleOnSelect>
+            {children}
+        </Dropdown>);
 };
