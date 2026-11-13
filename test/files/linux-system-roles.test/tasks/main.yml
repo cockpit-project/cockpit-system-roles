@@ -9,3 +9,8 @@
       }}
     dest: "/tmp/test_output.json"
     mode: "0644"
+
+- name: Fail on purpose
+  ansible.builtin.fail:
+    msg: The test role was asked to fail via test_fail.
+  when: test_fail | bool
