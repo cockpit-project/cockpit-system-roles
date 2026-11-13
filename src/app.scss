@@ -38,3 +38,18 @@
 .ct-top-border {
     border-block-start: solid var(--pf-t--global--border--color--default) 1px;
 }
+
+// Adjust borders of expandable tables that are directly in cards.
+// The card provides the rounded bottom border and we need to switch
+// off the tables own ones.
+//
+// We also switch off the border between a row and its expandable
+// content in general because they belong together.
+
+.pf-v6-c-card .pf-v6-c-table.pf-m-expandable .pf-v6-c-table__tbody .pf-v6-c-table__tr {
+    border-block-end: 0;
+}
+
+.pf-v6-c-card .pf-v6-c-table .pf-v6-c-table__tbody:last-child {
+    border-block-end: 0;
+}

@@ -47,3 +47,8 @@ argument_specs:
         type: int
         default: 0
         description: A integer.
+      test_fail:
+        type: bool
+        default: false
+        description:
+          - When true, the role fails on purpose.
