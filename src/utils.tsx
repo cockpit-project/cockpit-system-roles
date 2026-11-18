@@ -6,12 +6,11 @@
 
 import React, { useState, useEffect } from 'react';
 
-import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
 import { Tbody, Tr, TrProps, Td, ExpandableRowContent } from '@patternfly/react-table';
 import { Dropdown } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
 import { MenuToggle } from '@patternfly/react-core/dist/esm/components/MenuToggle/index.js';
-import { RhUiExternalLinkIcon, EllipsisVIcon } from '@patternfly/react-icons';
+import { EllipsisVIcon } from '@patternfly/react-icons';
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
 import { useObject } from 'hooks';
@@ -42,17 +41,6 @@ export function JSON_parse_type<T>(input: string, def: T): T {
     else
         return def;
 }
-
-export const ExternalLinkButton = (props : ButtonProps) => (
-    <Button
-        component="a"
-        icon={<RhUiExternalLinkIcon />}
-        iconPosition="right"
-        rel="noopener noreferrer"
-        target="_blank"
-        {...props}
-    />
-);
 
 export const ExpandableTr = ({
     rowIndex,

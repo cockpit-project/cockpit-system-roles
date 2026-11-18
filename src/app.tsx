@@ -16,7 +16,7 @@ import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button';
-import { RhUiTrashIcon } from '@patternfly/react-icons';
+import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
 import { Modal, ModalBody, ModalHeader, ModalFooter } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown';
@@ -286,6 +286,15 @@ const RoleRow = ({
                 <KebabMenu
                     ariaLabel={_("Role menu")}
                 >
+                    <DropdownItem
+                        data-read-more
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        to={`https://galaxy.ansible.com/ui/standalone/roles/linux-system-roles/${shortenstart("linux-system-roles.", role.name)}/documentation/`}
+                        icon={<RhUiExternalLinkIcon />}
+                    >
+                        {_("Read more")}
+                    </DropdownItem>
                     <DropdownItem
                         data-remove
                         onClick={
