@@ -178,9 +178,9 @@ export const useAppConfig = () => {
     return { config, error };
 };
 
-export async function update_variable(config: AppConfig, role: string, name: string, value: string) {
+export async function update_variable(config: AppConfig, role: string, name: string, value: string | undefined) {
     function update_vars(vars: Record<string, VarConfig>) {
-        if (value !== "")
+        if (value !== undefined)
             return {
                 ...vars,
                 [name]: { ...vars[name], value }

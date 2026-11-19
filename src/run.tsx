@@ -9,6 +9,7 @@ import React, { useReducer, useState, useEffect, useRef } from 'react';
 import { useInit } from "hooks";
 import { LongRunningProcess, ProcessState } from "long-running-process";
 import { superuser } from "superuser";
+import * as python from "python";
 
 import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card';
@@ -24,7 +25,7 @@ import { run_debouncers_now, ExpandableTr, shortenstart, WithExcuse } from "./ut
 import { SystemRoles } from "./roles";
 import { validate_all } from "./edit";
 
-import prepare_playbook_run_sh from "./prepare-playbook-run.sh";
+import prepare_playbook_run_py from "./prepare-playbook-run.py";
 
 const _ = cockpit.gettext;
 
@@ -500,36 +501,10 @@ export const PlaybookRunner = ({
         }
     );
 
-    const valid = validate_all(config, system_roles);
-
-    async function generate_playbook() {
-        await run_debouncers_now();
-        if (!validate_all(config, system_roles))
-            return null;
-        const roles = config.config.roles.filter(r => r.enabled);
-        return roles.map(
-            role => {
-                return {
-                    name: role.name,
-                    hosts: "all",
-                    vars: (
-                        Object.fromEntries(
-                            Object.entries(role.vars)
-                                    .filter(([, conf]) => !!conf.value)
-                                    .map(([name, conf]) => [name, JSON.parse(conf.value)]))
-                    ),
-                    roles: [role.name],
-                };
-            }
-        );
-    }
-
     async function run({ dry } : { dry: boolean }) {
         try {
-            const playbook = await generate_playbook();
-            if (!playbook)
-                return;
-            await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
+            await run_debouncers_now();
+            await python.spawn(prepare_playbook_run_py, [], { superuser: "try" }).input(JSON.stringify(config.config.roles));
             if (process.state === ProcessState.FAILED)
                 process.reset();
             await process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : [])], {});
@@ -545,6 +520,8 @@ export const PlaybookRunner = ({
             toaster.add_error(_("Failed to terminate the playbook"), ex);
         }
     }
+
+    const valid = validate_all(config, system_roles);
 
     let actions;
     if (process.state === ProcessState.STOPPED)

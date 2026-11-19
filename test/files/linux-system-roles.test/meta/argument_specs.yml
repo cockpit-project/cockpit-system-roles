@@ -46,7 +46,11 @@ argument_specs:
       test_int:
         type: int
         default: 0
-        description: A integer.
+        description: An integer.
+      test_float:
+        type: float
+        default: 2.17
+        description: A floating point number.
       test_fail:
         type: bool
         default: false
