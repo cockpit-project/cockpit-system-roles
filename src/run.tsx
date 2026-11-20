@@ -8,21 +8,24 @@ import cockpit from 'cockpit';
 import React, { useReducer, useState, useEffect, useRef } from 'react';
 import { useInit } from "hooks";
 import { LongRunningProcess, ProcessState } from "long-running-process";
+import { superuser } from "superuser";
+import * as python from "python";
 
+import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button';
-import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
-import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
-import { Flex, FlexItem } from '@patternfly/react-core/dist/esm/layouts/Flex';
+import { Label, LabelGroup, LabelColor, LabelStatus } from '@patternfly/react-core/dist/esm/components/Label';
+import { Icon } from '@patternfly/react-core/dist/esm/components/Icon';
+import { RhUiCheckIcon, RhUiMinusIcon, PlayIcon, StopIcon, StethoscopeIcon } from '@patternfly/react-icons';
 
 import { toaster } from "./toaster";
 import { AppConfig } from "./config";
-import { run_debouncers_now } from "./utils";
+import { run_debouncers_now, ExpandableTr, shortenstart, WithExcuse } from "./utils";
 import { SystemRoles } from "./roles";
 import { validate_all } from "./edit";
 
-import prepare_playbook_run_sh from "./prepare-playbook-run.sh";
+import prepare_playbook_run_py from "./prepare-playbook-run.py";
 
 const _ = cockpit.gettext;
 
@@ -50,7 +53,7 @@ interface AnsibleEventHosts {
 
 interface AnsibleEvent_CockpitRunStart {
     _event: "cockpit_system_role_run_start",
-    arguments: string[],
+    arguments: string,
 }
 
 interface AnsibleEvent_PlayStart {
@@ -97,50 +100,50 @@ interface AnsibleEvent_Stats {
 
 type AnsibleEvent = AnsibleEvent_CockpitRunStart | AnsibleEvent_PlayStart | AnsibleEvent_TaskStart | AnsibleEvent_OK | AnsibleEvent_Skipped | AnsibleEvent_Failed | AnsibleEvent_Stats;
 
-const JSONL = {
-    parse: (val: string) => {
-        return val.split("\n").slice(0, -1)
-                .map(l => JSON.parse(l));
-    }
-};
+enum RunState {
+    running,
+    skipped,
+    ok,
+    made_changes,
+    failed,
+}
 
-export const useAnsibleEvents = () => {
-    const [events, setEvents] = useState<AnsibleEvent[] | null>(null);
-    const [error, setError] = useState<unknown>(null);
+interface TaskRunData {
+    name: string;
+    state: RunState;
+    messages: string[];
+}
 
-    useEffect(
-        () => {
-            const file: cockpit.FileHandle<unknown> = cockpit.file(
-                "/run/cockpit/system-roles/run.out",
-                { syntax: JSONL, superuser: "try" }
-            );
+interface PlayRunData {
+    name: string;
+    state: RunState,
+    tasks: TaskRunData[];
+    running_task_name: string | undefined;
+}
 
-            file.watch(
-                (data, _tag, error) => {
-                    if (error) {
-                        setEvents(null);
-                        setError(error);
-                    } else {
-                        setEvents(data ? data as AnsibleEvent[] : []);
-                        setError(null);
-                    }
-                }
-            );
-        },
-        []
-    );
+interface RunStats {
+    changed: number,
+    failures: number,
+    ok: number,
+    skipped: number,
+}
 
-    return { events, error };
-};
+interface PlaybookRunData {
+    check_mode: boolean;
+    state: RunState;
+    stats: null | RunStats;
+    plays: PlayRunData[];
+}
 
-function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
-    let check_mode: boolean = false;
+function collate_ansible_events(events: AnsibleEvent[]) {
+    const data: PlaybookRunData = { check_mode: false, state: RunState.running, stats: null, plays: [] };
+
+    let running_play: string | null = null;
     let running_task: AnsibleEventTask | null = null;
-    const results: React.ReactNode[] = [];
 
-    function push(elt: React.ReactNode) {
-        results.push(<div key={results.length}>{elt}</div>);
-    }
+    let tasks: TaskRunData[] = [];
+    let tasks_changed: number = 0;
+    let tasks_failed: number = 0;
 
     function expect_running_task(task: AnsibleEventTask) {
         if (running_task && running_task.id === task.id)
@@ -156,97 +159,310 @@ function render_ansible_events(events: AnsibleEvent[], show_all: boolean) {
         }
     }
 
+    function finish_play() {
+        if (running_task)
+            tasks.push({ name: running_task.name, state: RunState.running, messages: [] });
+        if (running_play) {
+            let state;
+            if (running_task) {
+                state = RunState.running;
+            } else if (tasks_failed) {
+                state = RunState.failed;
+            } else if (tasks_changed) {
+                state = RunState.made_changes;
+            } else {
+                state = RunState.ok;
+            }
+
+            data.plays.push({ name: running_play, state, tasks, running_task_name: running_task?.name });
+            running_play = null;
+            tasks = [];
+            tasks_changed = 0;
+            tasks_failed = 0;
+        }
+    }
+
+    function start_play(play: string) {
+        expect_no_running_task();
+        finish_play();
+        running_play = play;
+    }
+
     for (const event of events) {
         if (event._event === "cockpit_system_role_run_start") {
-            check_mode = event.arguments.includes("--check");
-            if (check_mode)
-                push(<i>{_("Drift check run")}</i>);
+            data.check_mode = event.arguments.includes("--check");
         } else if (event._event === "v2_playbook_on_play_start") {
-            expect_no_running_task();
-            push(<b>{event.play.name}</b>);
+            start_play(event.play.name);
         } else if (event._event === "v2_playbook_on_task_start" || event._event === "v2_playbook_on_handler_task_start") {
             expect_no_running_task();
             running_task = event.task;
         } else if (event._event === "v2_runner_on_ok") {
             if (expect_running_task(event.task)) {
                 running_task = null;
+                let task: TaskRunData;
                 if (event.hosts.localhost.changed) {
-                    push(<>{event.task.name} {check_mode ? _("CHANGES NEEDED") : _("CHANGED")}</>);
-                    if (event.hosts.localhost.msg)
-                        push(<>- {event.hosts.localhost.msg}</>);
-                } else if (show_all)
-                    push(<>{event.task.name} {_("(no change)")}</>);
+                    tasks_changed += 1;
+                    task = { name: event.task.name, state: RunState.made_changes, messages: [] };
+                } else {
+                    task = { name: event.task.name, state: RunState.ok, messages: [] };
+                }
+                if (event.hosts.localhost.msg)
+                    task.messages.push(event.hosts.localhost.msg);
+                tasks.push(task);
             }
         } else if (event._event === "v2_runner_on_skipped") {
             if (expect_running_task(event.task)) {
                 running_task = null;
-                if (show_all)
-                    push(<>{event.task.name} {_("(skipped)")}</>);
+                tasks.push({ name: event.task.name, state: RunState.skipped, messages: [] });
             }
         } else if (event._event === "v2_runner_on_failed") {
             if (expect_running_task(event.task)) {
                 running_task = null;
-                push(<>{event.task.name} {_("FAILED")}</>);
-                push(<>- {event.hosts.localhost.msg}</>);
+                tasks_failed += 1;
+                const task: TaskRunData = { name: event.task.name, state: RunState.failed, messages: [] };
+                if (event.hosts.localhost.msg)
+                    task.messages.push(event.hosts.localhost.msg);
                 if (event.hosts.localhost.results) {
                     for (const res of event.hosts.localhost.results) {
                         if (res.failed)
-                            push(<>- {res.msg}</>);
+                            task.messages.push(res.msg);
                     }
                 }
+                tasks.push(task);
             }
         } else if (event._event === "v2_playbook_on_stats") {
             expect_no_running_task();
-            push(<br />);
-            const stats = event.stats.localhost;
-            if (stats.changed !== 0) {
-                if (check_mode) {
-                    push(cockpit.format(_("$0 tasks have reported differences between the desired and the actual state of the machine."), stats.changed));
-                } else {
-                    push(cockpit.format(_("$0 tasks have made changes."), stats.changed));
-                }
-            }
-            if (stats.failures !== 0)
-                push(cockpit.format(_("$0 tasks have failed."), stats.failures));
-            if (stats.changed === 0 && stats.failures === 0) {
-                if (check_mode) {
-                    push(_("The machine is in the desired state."));
-                } else {
-                    push(_("Nothing interesting has happened."));
-                }
-            }
+            finish_play();
+
+            data.stats = event.stats.localhost;
+            if (data.stats.failures)
+                data.state = RunState.failed;
+            else if (data.stats.changed)
+                data.state = RunState.made_changes;
+            else
+                data.state = RunState.ok;
         } else {
             console.warn(`Unexpected Ansible event sequence.  Event ${event._event} is unknown.`);
         }
     }
 
-    if (running_task)
-        push(<>{running_task.name} <Spinner isInline /></>);
+    finish_play();
 
-    return results;
+    return data;
 }
 
-export const PlaybookOutput = () => {
-    const [showAll, setShowAll] = useState(false);
-    const { events, error } = useAnsibleEvents();
+const JSONL = {
+    parse: (val: string) => {
+        return val.split("\n").slice(0, -1)
+                .map(l => JSON.parse(l));
+    }
+};
 
-    const actions = (
-        <Switch
-            label={_("Show all execution steps")}
-            isChecked={showAll}
-            onChange={(_event, val) => setShowAll(val)}
-        />
+export const usePlaybookRunData = () => {
+    const [data, setData] = useState<PlaybookRunData | null>(null);
+    const [error, setError] = useState<unknown>(null);
+
+    useEffect(
+        () => {
+            const file: cockpit.FileHandle<unknown> = cockpit.file(
+                "/run/cockpit/system-roles/run.out",
+                { syntax: JSONL, superuser: "try" }
+            );
+
+            file.watch(
+                (events, _tag, error) => {
+                    if (error) {
+                        setData(null);
+                        setError(error);
+                    } else {
+                        setData(collate_ansible_events(events ? events as AnsibleEvent[] : []));
+                        setError(null);
+                    }
+                }
+            );
+        },
+        []
     );
 
+    return { data, error };
+};
+
+const TaskState = ({
+    state,
+} : {
+    state: RunState,
+}) => {
+    switch (state) {
+    case RunState.running:
+        return <Spinner isInline />;
+    case RunState.failed:
+        return <Label status={LabelStatus.danger} isCompact>{_("failed")}</Label>;
+    case RunState.made_changes:
+        return <Label status={LabelStatus.warning} isCompact>{_("changes")}</Label>;
+    case RunState.skipped:
+        return <Icon status="info"><RhUiMinusIcon /></Icon>;
+    default:
+        return <Icon status="success"><RhUiCheckIcon /></Icon>;
+    }
+};
+
+const TaskRow = ({
+    data,
+} : {
+    data: TaskRunData,
+}) => {
     return (
-        <Card id="playbook-output">
+        <>
+            <div>
+                {data.name}
+                <div style={{ display: "inline-block", width: "0.5em" }} />
+                <TaskState state={data.state} />
+            </div>
+            {data.messages.map((msg, index) => <div key={index}>- {msg}</div>)}
+        </>
+    );
+};
+
+const PlayState = ({
+    state,
+} : {
+    state: RunState,
+}) => {
+    switch (state) {
+    case RunState.running:
+        return <Label variant="outline" color={LabelColor.grey} icon={<Spinner isInline />}>{_("Running")}</Label>;
+    case RunState.failed:
+        return <Label variant="outline" status={LabelStatus.danger}>{_("Failed")}</Label>;
+    case RunState.made_changes:
+        return <Label variant="outline" status={LabelStatus.warning}>{_("Made changes")}</Label>;
+    default:
+        return <Label variant="outline" status={LabelStatus.success}>{_("Done")}</Label>;
+    }
+};
+
+const PlayRow = ({
+    data,
+    rowIndex,
+} : {
+    data: PlayRunData
+    rowIndex: number,
+}) => {
+    return (
+        <ExpandableTr
+            data-play={data.name}
+            expandableContent={data.tasks.map((task_data, index) => <TaskRow key={index} data={task_data} />)}
+            rowIndex={rowIndex}
+        >
+            <Td modifier="fitContent">
+                <PlayState state={data.state} />
+            </Td>
+            <Td modifier="fitContent"><b>{shortenstart("linux-system-roles.", data.name)}</b></Td>
+            <Td>{data.running_task_name}</Td>
+        </ExpandableTr>
+    );
+};
+
+const PlaybookRunStats = ({
+    data
+} : {
+    data: PlaybookRunData
+}) => {
+    let summary;
+    switch (data.state) {
+    case RunState.running:
+        summary = <Label color={LabelColor.grey} icon={<Spinner isInline />}>{_("Running")}</Label>;
+        break;
+    case RunState.failed:
+        summary = <Label status={LabelStatus.danger}>{_("Failed")}</Label>;
+        break;
+    case RunState.made_changes:
+        summary = (
+            <Label status={LabelStatus.warning}>
+                {data.check_mode ? _("Changes need to be made") : _("Changes have been made")}
+            </Label>
+        );
+        break;
+    default:
+        summary = <Label status={LabelStatus.success}>{_("Success")}</Label>;
+        break;
+    }
+
+    function stat_label(n: number, status: LabelStatus, icon: React.ReactNode, fmt: string) {
+        if (n)
+            return (
+                <Label
+                    isCompact
+                    variant="outline"
+                    status={status}
+                    icon={icon}
+                >
+                    {cockpit.format(fmt, n)}
+                </Label>
+            );
+    }
+
+    let stats;
+    if (data.stats)
+        stats = (
+            <LabelGroup isCompact numLabels={4}>
+                {stat_label(data.stats.failures, LabelStatus.danger, null, _("$0 failed"))}
+                {stat_label(data.stats.changed, LabelStatus.warning, null, _("$0 changes"))}
+                {stat_label(data.stats.ok, LabelStatus.success, <RhUiCheckIcon />, _("$0 ok"))}
+                {stat_label(data.stats.skipped, LabelStatus.info, <RhUiMinusIcon />, _("$0 skipped"))}
+            </LabelGroup>
+        );
+
+    return (
+        <>
+            {summary}
+            <div style={{ display: "inline-block", width: "1em" }} />
+            {stats}
+        </>
+    );
+};
+
+const PlaybookOutput = ({
+    data
+} : {
+    data: PlaybookRunData
+}) => {
+    return (
+        <Table isExpandable>
+            <Tbody>
+                <Tr>
+                    <Td colSpan={4}>
+                        <PlaybookRunStats data={data} />
+                    </Td>
+                </Tr>
+            </Tbody>
+            {data.plays.map((play_data, index) => <PlayRow key={index} data={play_data} rowIndex={index} />)}
+        </Table>
+    );
+};
+
+export const PlaybookExecution = ({
+    config,
+    system_roles,
+} : {
+    config: AppConfig,
+    system_roles: SystemRoles,
+}) => {
+    const { data, error } = usePlaybookRunData();
+
+    const actions = superuser.allowed && <PlaybookRunner config={config} system_roles={system_roles} />;
+
+    return (
+        <Card id="playbook-execution">
             <CardHeader actions={{ actions }}>
                 <CardTitle>{_("Playbook execution")}</CardTitle>
             </CardHeader>
-            <CardBody>
-                { error ? cockpit.format(_("Can't load playbook events: $0"), String(error)) : null }
-                { events && render_ansible_events(events, showAll) }
-            </CardBody>
+            {
+                !!error &&
+                    <CardBody>
+                        {cockpit.format(_("Can't load playbook events: $0"), String(error))}
+                    </CardBody>
+            }
+            { data && <PlaybookOutput data={data} /> }
         </Card>
     );
 };
@@ -273,7 +489,8 @@ export const PlaybookRunner = ({
                     if (pr.state === ProcessState.FAILED && prev !== ProcessState.FAILED) {
                         try {
                             const err = await cockpit.file("/run/cockpit/system-roles/run.err", { superuser: "require" }).read();
-                            toaster.add(_("Playbook execution failed"), err);
+                            if (err)
+                                toaster.add(_("Playbook execution failed"), err);
                         } catch (ex) {
                             toaster.add(_("Playbook execution failed"), cockpit.format(_("Can't access error: $0"), String(ex)));
                         }
@@ -284,36 +501,10 @@ export const PlaybookRunner = ({
         }
     );
 
-    const valid = validate_all(config, system_roles);
-
-    async function generate_playbook() {
-        await run_debouncers_now();
-        if (!validate_all(config, system_roles))
-            return null;
-        const roles = config.config.roles;
-        return roles.map(
-            role => {
-                return {
-                    name: role.name,
-                    hosts: "all",
-                    vars: (
-                        Object.fromEntries(
-                            Object.entries(role.vars)
-                                    .filter(([, conf]) => !!conf.value)
-                                    .map(([name, conf]) => [name, JSON.parse(conf.value)]))
-                    ),
-                    roles: [role.name],
-                };
-            }
-        );
-    }
-
-    async function run(dry: boolean) {
+    async function run({ dry } : { dry: boolean }) {
         try {
-            const playbook = await generate_playbook();
-            if (!playbook)
-                return;
-            await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
+            await run_debouncers_now();
+            await python.spawn(prepare_playbook_run_py, [], { superuser: "try" }).input(JSON.stringify(config.config.roles));
             if (process.state === ProcessState.FAILED)
                 process.reset();
             await process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : [])], {});
@@ -330,46 +521,49 @@ export const PlaybookRunner = ({
         }
     }
 
+    const valid = validate_all(config, system_roles);
+
     let actions;
-    if (process.state === ProcessState.INIT)
-        actions = <Spinner />;
-    else if (process.state === ProcessState.STOPPED)
+    if (process.state === ProcessState.STOPPED)
         actions = (
-            <Flex>
-                <FlexItem>
+            <>
+                <WithExcuse
+                    id="playbook-run-excuse"
+                    excuse={!valid && _("Some playbook variables have invalid values.")}
+                >
                     <Button
                         id="playbook-run"
-                        onClick={() => run(false)}
-                        variant="danger"
-                        isDisabled={!valid}
-                    >
-                        {_("Apply the configuration to the local machine")}
-                    </Button>
-                </FlexItem>
-                <FlexItem>
+                        aria-label={_("Run the playbook")}
+                        onClick={() => run({ dry: false })}
+                        isAriaDisabled={!valid}
+                        variant="plain"
+                        icon={<PlayIcon />}
+                    />
+                </WithExcuse>
+                <WithExcuse
+                    id="playbook-run-excuse"
+                    excuse={!valid && _("Some playbook variables have invalid values.")}
+                >
                     <Button
                         id="playbook-check"
-                        onClick={() => run(true)}
-                        variant="secondary"
-                        isDisabled={!valid}
-                    >
-                        {_("Check whether any changes are necessary")}
-                    </Button>
-                </FlexItem>
-            </Flex>
+                        aria-label={_("Run the playbook in 'check' mode")}
+                        onClick={() => run({ dry: true })}
+                        isAriaDisabled={!valid}
+                        variant="plain"
+                        icon={<StethoscopeIcon />}
+                    />
+                </WithExcuse>
+            </>
         );
     else if (process.state === ProcessState.RUNNING)
         actions = (
             <Button
+                aria-label={_("Stop playbook run")}
                 onClick={terminate}
-            >
-                {_("Stop")}
-            </Button>
+                variant="plain"
+                icon={<StopIcon />}
+            />
         );
 
-    return (
-        <Bullseye>
-            {actions}
-        </Bullseye>
-    );
+    return actions;
 };

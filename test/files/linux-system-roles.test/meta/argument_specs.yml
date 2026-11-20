@@ -13,6 +13,12 @@ argument_specs:
           - An arbitrary string.
           - "- This\n- has\n- bullets."
           - And multiple paragraphs.
+          - It is also very long (more than 500 characters) so that Cockpit will cut it off.
+          - No matter your role, or your automation goals, Ansible can help you connect teams and deliver efficiencies.
+          - Ansible is an open source IT automation engine that automates provisioning, configuration management, application deployment, orchestration, and many other IT processes. It is free to use, and the project benefits from the experience and intelligence of its thousands of contributors.
+          - Red Hat Ansible Automation Platform combines more than a dozen upstream projects into a unified, security-hardened enterprise platform for mission-critical automation. It builds on the foundation of the open source project to create an end-to-end automation experience for cross-functional teams.
+          - Ansible is an open source, command-line IT automation software application written in Python. It can configure systems, deploy software, and orchestrate advanced workflows to support application deployment, system updates, and more.
+          - Ansibles main strengths are simplicity and ease of use. It also has a strong focus on security and reliability, featuring minimal moving parts. It uses OpenSSH for transport (with other transports and pull modes as alternatives), and uses a human-readable language that is designed for getting started quickly without a lot of training.
       test_bool:
         type: bool
         default: false
@@ -40,4 +46,13 @@ argument_specs:
       test_int:
         type: int
         default: 0
-        description: A integer.
+        description: An integer.
+      test_float:
+        type: float
+        default: 2.17
+        description: A floating point number.
+      test_fail:
+        type: bool
+        default: false
+        description:
+          - When true, the role fails on purpose.

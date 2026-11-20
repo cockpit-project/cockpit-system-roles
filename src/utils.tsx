@@ -4,15 +4,23 @@
  * Copyright (C) 2026 Red Hat, Inc.
  */
 
+import cockpit from 'cockpit';
 import React, { useState, useEffect } from 'react';
 
-import { Button, ButtonProps } from '@patternfly/react-core/dist/esm/components/Button';
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput';
-import { RhUiExternalLinkIcon } from '@patternfly/react-icons';
+import { Tooltip, TooltipPosition } from "@patternfly/react-core/dist/esm/components/Tooltip/index.js";
 import { Tbody, Tr, TrProps, Td, ExpandableRowContent } from '@patternfly/react-table';
+import { Dropdown } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
+import { MenuToggle } from '@patternfly/react-core/dist/esm/components/MenuToggle/index.js';
+import { EllipsisVIcon } from '@patternfly/react-icons';
+import { ExpandableSection, ExpandableSectionVariant } from '@patternfly/react-core/dist/esm/components/ExpandableSection';
+
+import Markdown from "markdown-to-jsx";
 
 import { FileChooserInput, FileChooserProps } from 'cockpit/react/FileChooser';
 import { useObject } from 'hooks';
+
+const _ = cockpit.gettext;
 
 export function shortenstart(prefix: string, val: string): string {
     if (val.startsWith(prefix))
@@ -40,17 +48,6 @@ export function JSON_parse_type<T>(input: string, def: T): T {
     else
         return def;
 }
-
-export const ExternalLinkButton = (props : ButtonProps) => (
-    <Button
-        component="a"
-        icon={<RhUiExternalLinkIcon />}
-        iconPosition="right"
-        rel="noopener noreferrer"
-        target="_blank"
-        {...props}
-    />
-);
 
 export const ExpandableTr = ({
     rowIndex,
@@ -216,5 +213,133 @@ export const DebouncedFileChooserInput = ({
             }
             fileChooserProps={fileChooserProps}
         />
+    );
+};
+
+export const TwoResizableColumns = ({
+    children,
+} : {
+    children: React.ReactNode[],
+}) => {
+    const left = children[0];
+    const right = children.slice(1);
+
+    // TODO - Make this actually resizable.  For now we fix this at
+    // 1/3 left, 2/3 right, see app.css.
+
+    return (
+        <div className="ct-resizable-columns">
+            <div className="ct-resizable-left">
+                {left}
+            </div>
+            <div className="ct-resizable-right">
+                {right}
+            </div>
+        </div>
+    );
+};
+
+export const KebabMenu = ({
+    ariaLabel,
+    children
+} : {
+    ariaLabel: string,
+    children: React.ReactNode
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <Dropdown
+            isOpen={isOpen}
+            onSelect={() => setIsOpen(false)}
+            onOpenChange={isOpen => setIsOpen(isOpen)}
+            aria-label={ariaLabel}
+            toggle={
+                ref => (
+                    <MenuToggle
+                        ref={ref}
+                        variant="plain"
+                        onClick={() => setIsOpen(!isOpen)}
+                        isExpanded={isOpen}
+                    >
+                        <EllipsisVIcon />
+                    </MenuToggle>
+                )
+            }
+            popperProps={{ position: "right" }}
+            shouldFocusToggleOnSelect
+        >
+            {children}
+        </Dropdown>
+    );
+};
+
+export const Description = ({
+    children
+} : {
+    children: string | string[] | undefined
+}) => {
+    const [showAll, setShowAll] = useState(false);
+
+    const options = {
+        overrides: {
+            a: {
+                props: {
+                    rel: "noopener noreferrer",
+                    target: "_blank",
+                },
+            },
+            // XXX - PatternFly messes with CSS so that for example
+            // <ul> doesn't get bullets. We probably need to configure
+            // Markdown to use PF text markup instead of the standard
+            // HTML one. Trying to undo PF CSS changes is the wrong
+            // approach.
+            ul: {
+                props: {
+                    style: { listStyle: "inside" },
+                }
+            }
+        },
+    };
+
+    if (children) {
+        const text = Array.isArray(children) ? children.join("\n\n") : children;
+        return (
+            <ExpandableSection
+                variant={ExpandableSectionVariant.truncate}
+                toggleTextCollapsed={_("Show more")}
+                toggleTextExpanded={_("Show less")}
+                onToggle={() => setShowAll(flag => !flag)}
+                truncateMaxLines={3}
+                isExpanded={showAll}
+            >
+                <Markdown options={options}>
+                    { text }
+                </Markdown>
+            </ExpandableSection>
+        );
+    }
+};
+
+export const WithExcuse = ({
+    id,
+    excuse,
+    children,
+} : {
+    id: string,
+    excuse: string | undefined | false | null,
+    children: React.ReactElement,
+}) => {
+    if (!excuse)
+        return children;
+
+    return (
+        <Tooltip
+            id={id}
+            content={excuse}
+            position={TooltipPosition.top}
+        >
+            {children}
+        </Tooltip>
     );
 };

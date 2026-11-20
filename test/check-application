@@ -6,7 +6,22 @@
 import json
 
 import testlib
+import yaml
 
+
+class UnsafeString:
+    def __init__(self, val):
+        self.val = val
+    def __repr__(self):
+        return f"UnsafeString({self.val})"
+    def __eq__(self, other):
+        return isinstance(other, UnsafeString) and self.val == other.val
+
+def unsafe_string_constructor(loader, node):
+    value = loader.construct_scalar(node)
+    return UnsafeString(value)
+
+yaml.add_constructor('!unsafe', unsafe_string_constructor)
 
 @testlib.nondestructive
 class TestSystemRoles(testlib.MachineCase):
@@ -14,14 +29,19 @@ class TestSystemRoles(testlib.MachineCase):
     def role_row(self, role: str) -> str:
         return f"#configured-roles tbody tr[data-role=\"{role}\"]"
 
-    def role_var_row(self, role: str, var: str) -> str:
-        return f"{self.role_row(role)} + tr table tr[data-var=\"{var}\"]"
+    def role_var_row(self, var: str) -> str:
+        return f"#role-edit [data-var=\"{var}\"]"
 
-    def expand_role_row(self, name: str) -> None:
+    def play_row(self, play: str) -> str:
+        return f"#playbook-execution tbody tr[data-play=\"{play}\"]"
+
+    def play_tasks(self, play: str) -> str:
+        return f"#playbook-execution tbody tr[data-play=\"{play}\"] + tr"
+
+    def expand_play_row(self, name: str) -> None:
         b = self.browser
-        sel = self.role_row(name)
+        sel = self.play_row(name)
         isExpanded = 'pf-m-expanded' in b.attr(f"{sel} + tr", "class")
-
         if not isExpanded:
             b.click(f"{sel} .pf-v6-c-table__toggle button")
             b.wait_visible(f"{sel} + tr.pf-m-expanded")
@@ -34,11 +54,10 @@ class TestSystemRoles(testlib.MachineCase):
 
         self.login_and_go("/system-roles", superuser=False)
 
-        b.wait_in_text("body", "Manage your system with Ansible and System Roles")
-
         b.wait_in_text("body", "Administrative access needed.")
+        b.wait_not_present("#configured-roles")
         b.become_superuser()
-        b.wait_in_text("body", "Configured System Roles")
+        b.wait_visible("#configured-roles")
 
         # Running without any roles is an error and puts up a
         # toast. We want to test the toast here; eventually the UI
@@ -65,38 +84,60 @@ class TestSystemRoles(testlib.MachineCase):
         b.click("#add-role-modal tr:contains('linux-system-roles.test')")
         b.wait_not_present("#add-role-modal")
 
-        # Remove "nbde_server"
+        # Switch between roles
 
-        b.click(self.role_row("linux-system-roles.nbde_server") + " button[data-remove]")
-        b.wait_not_present(self.role_row("linux-system-roles.nbde_server"))
+        b.wait_text("#role-edit h3", "nbde_server")
+        b.click(self.role_row("linux-system-roles.test") + " td:nth-child(2)")
+        b.wait_text("#role-edit h3", "test")
 
-        # Expand "test" role, pixels
+        # Disable "nbde_server"
 
-        self.expand_role_row("linux-system-roles.test")
+        b.set_checked(self.role_row("linux-system-roles.nbde_server") + " input[type=checkbox]", False)
+
+        # "test" role should still be selected, pixels
+
+        b.wait_text("#role-edit h3", "test")
         b.assert_pixels("#configured-roles", "role-variables", skip_layouts=["mobile"])
+
+        # Description for "test_str" should be truncated, but this
+        # happens via CSS and the only way we can observe this is via
+        # pixel texts.
+
+        b.click(self.role_var_row("test_str") + " button:contains('Show more')")
+        b.assert_pixels("#configured-roles", "role-variables-expanded", skip_layouts=["mobile"])
+        b.click(self.role_var_row("test_str") + " button:contains('Show less')")
 
         # Change "str"
 
-        rvr = self.role_var_row("linux-system-roles.test", "test_str")
+        rvr = self.role_var_row("test_str")
         b.wait_val(rvr + " input", "hello")
         b.set_input_text(rvr + " input", "Hi")
 
         # Run check
 
         b.click("#playbook-check")
-        b.wait_in_text("#playbook-output", "Drift check run")
-        b.wait_in_text("#playbook-output",
-                       "linux-system-roles.test : Record the parameters this role was invoked with CHANGES NEEDED")
-        b.wait_in_text("#playbook-output",
-                       "1 tasks have reported differences between the desired and the actual state of the machine.")
+        b.wait_in_text("#playbook-execution", "Changes need to be made")
+        self.expand_play_row("linux-system-roles.test")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "linux-system-roles.test : Record the parameters this role was invoked withchanges")
+        b.wait_not_present(self.play_row("linux-system-roles.nbde_server"))
+
+        # Enable and then remove "nbde_server"
+
+        b.set_checked(self.role_row("linux-system-roles.nbde_server") + " input[type=checkbox]", True)
+        b.select_PF(self.role_row("linux-system-roles.nbde_server") + " button.pf-v6-c-menu-toggle", "Remove")
+        b.wait_in_text("#remove-role-modal", "Permanently remove system role nbde_server?")
+        b.click("#remove-role-modal button:contains('Remove role')")
+        b.wait_not_present(self.role_row("linux-system-roles.nbde_server"))
 
         # Run real
 
         b.click("#playbook-run")
-        b.wait_in_text("#playbook-output",
-                       "linux-system-roles.test : Record the parameters this role was invoked with CHANGED")
-        b.wait_in_text("#playbook-output",
-                       "1 tasks have made changes")
+        b.wait_in_text("#playbook-execution", "Changes have been made")
+        self.expand_play_row("linux-system-roles.test")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "linux-system-roles.test : Record the parameters this role was invoked withchanges")
+        b.assert_pixels("#playbook-execution", "run-with-changes", skip_layouts=["mobile"])
 
         # Check file content
 
@@ -108,8 +149,7 @@ class TestSystemRoles(testlib.MachineCase):
         # the next run correctly.
 
         m.execute("rm /run/cockpit/system-roles/run.out")
-        b.wait_not_in_text("#playbook-output",
-                           "1 tasks have made changes")
+        b.wait_not_in_text("#playbook-execution", "Changes have been made")
 
         # Set "test_str" back to default, it should disappear from the
         # config (we do this for code coverage)
@@ -117,8 +157,7 @@ class TestSystemRoles(testlib.MachineCase):
         b.set_input_text(rvr + " input", "hello")
 
         b.click("#playbook-run")
-        b.wait_in_text("#playbook-output",
-                       "1 tasks have made changes")
+        b.wait_in_text("#playbook-execution", "Changes have been made")
 
         output = json.loads(m.execute("cat /tmp/test_output.json"))
         self.assertEqual(output["test_str"], "hello")
@@ -128,47 +167,75 @@ class TestSystemRoles(testlib.MachineCase):
         # the next run correctly.
 
         m.execute("rm /run/cockpit/system-roles/run.out")
-        b.wait_not_in_text("#playbook-output",
-                           "1 tasks have made changes")
+        b.wait_not_in_text("#playbook-execution", "Changes have been made")
 
         # Set a couple other variables of various types, and make some mistakes along the way
 
-        b.set_checked(self.role_var_row("linux-system-roles.test", "test_bool") + " input", True)
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
-                         "[ { foo: \"bar\" } ]")
-        b.wait_in_text(self.role_var_row("linux-system-roles.test", "test_raw") + " .pf-v6-c-helper-text",
-                       "Must be valid JSON")
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_raw") + " input",
-                         "[ { \"foo\": \"bar\" } ]")
-        b.wait_not_present(self.role_var_row("linux-system-roles.test", "test_raw") + ".pf-v6-c-helper-text")
-        b.set_checked(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=checkbox]", True)
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_none") + " input[type=text]", "world")
-        b.select_PF(self.role_var_row("linux-system-roles.test", "test_choices") + " .pf-v6-c-menu-toggle",
-                    "red")
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_path") + " input", "/etc")
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "twelve")
-        b.wait_in_text(self.role_var_row("linux-system-roles.test", "test_int") + " .pf-v6-c-helper-text",
-                       "Must be valid JSON")
-        b.set_input_text(self.role_var_row("linux-system-roles.test", "test_int") + " input", "12")
-        b.wait_not_present(self.role_var_row("linux-system-roles.test", "test_int") + " .pf-v6-c-helper-text")
+        b.set_checked(self.role_var_row("test_bool") + " input", True)
+        b.set_checked(self.role_var_row("test_none") + " input[type=checkbox]", True)
+        b.set_input_text(self.role_var_row("test_none") + " input[type=text]", "world")
+        b.select_PF(self.role_var_row("test_choices") + " .pf-v6-c-menu-toggle", "red")
+        b.set_input_text(self.role_var_row("test_path") + " input", "/etc")
+        b.set_input_text(self.role_var_row("test_int") + " input", "twelve")
+        b.wait_in_text(self.role_var_row("test_int") + " .pf-v6-c-helper-text", "Must be an integer")
+        b.set_input_text(self.role_var_row("test_int") + " input", "12")
+        b.wait_not_present(self.role_var_row("test_float") + " .pf-v6-c-helper-text")
+        b.set_input_text(self.role_var_row("test_float") + " input", "twelve")
+        b.wait_in_text(self.role_var_row("test_float") + " .pf-v6-c-helper-text", "Must be a number")
+        b.set_input_text(self.role_var_row("test_float") + " input", "3.14")
+        b.wait_not_present(self.role_var_row("test_float") + " .pf-v6-c-helper-text")
+
+        # Editing raw YAML
+
+        b.click(self.role_var_row("test_raw") + " button")
+        b.wait_visible("#edit-raw-modal")
+        b.set_input_text("#edit-raw-modal textarea", '"hi')
+        b.click("#edit-raw-modal button:contains(Save)")
+        b.wait_in_text("#edit-raw-modal .pf-v6-c-alert", "Invalid YAML")
+        b.set_input_text("#edit-raw-modal textarea", '[ { \"foo\": \"bar\" } ]')
+        b.click("#edit-raw-modal button:contains(Save)")
+        b.wait_not_present("#edit-raw-modal")
 
         b.click("#playbook-run")
-        b.wait_in_text("#playbook-output",
-                       "1 tasks have made changes")
+        b.wait_in_text("#playbook-execution", "Changes have been made")
 
-        playbook = json.loads(m.execute("cat /run/cockpit/system-roles/playbook.json"))
+        playbook = yaml.load(m.execute("cat /run/cockpit/system-roles/playbook.yml"), yaml.Loader)
 
         self.assertEqual(playbook[0]["name"], "linux-system-roles.test")
         self.assertEqual(playbook[0]["vars"]["test_bool"], True)
-        self.assertEqual(playbook[0]["vars"]["test_none"], "world")
+        self.assertEqual(playbook[0]["vars"]["test_none"], UnsafeString("world"))
         self.assertEqual(playbook[0]["vars"]["test_raw"], [ { "foo": "bar" } ])
-        self.assertEqual(playbook[0]["vars"]["test_choices"], "red")
-        self.assertEqual(playbook[0]["vars"]["test_path"], "/etc")
+        self.assertEqual(playbook[0]["vars"]["test_choices"], UnsafeString("red"))
+        self.assertEqual(playbook[0]["vars"]["test_path"], UnsafeString("/etc"))
         self.assertEqual(playbook[0]["vars"]["test_int"], 12)
+        self.assertEqual(playbook[0]["vars"]["test_float"], 3.14)
+
+        # Make the playbook fail
+
+        b.set_checked(self.role_var_row("test_fail") + " input", True)
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-execution", "Failed")
+        self.expand_play_row("linux-system-roles.test")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "linux-system-roles.test : Fail on purposefailed")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "- The test role was asked to fail via test_fail")
+        b.assert_pixels("#playbook-execution", "run-failed", skip_layouts=["mobile"])
+
+        # Failures due to tasks should not pop up a toast.
+        b.wait_not_present(".pf-v6-c-alert")
+
+        # Run it again without the flag. No changes should be made
+
+        b.set_checked(self.role_var_row("test_fail") + " input", False)
+
+        b.click("#playbook-run")
+        b.wait_in_text("#playbook-execution", "Success")
+        b.assert_pixels("#playbook-execution", "run-success", skip_layouts=["mobile"])
 
         # -> more ideas from coverage
         #
-        # - non-superuser
         # - "str/choices" without default
         # - "bool" without default
         # - "path" without default
@@ -182,11 +249,7 @@ class TestSystemRoles(testlib.MachineCase):
         # - updating a role to drop a variable
         # - removing system role completely
         # - skipped task
-        # - failed task
-        # - run without any changes
         # - check run without any needed changes
-        # - show all events
-        # - running after failure
         # - cancelling a run
 
 
