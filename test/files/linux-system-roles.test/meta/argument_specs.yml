@@ -60,3 +60,8 @@ argument_specs:
         default: false
         description:
           - When true, the role fails on purpose.
+      test_hang:
+        type: bool
+        default: false
+        description:
+          - When true, the role stops and waits indefinitely.

@@ -225,6 +225,19 @@ class TestSystemRoles(testlib.MachineCase):
         b.wait_in_text("#playbook-execution", "Success")
         b.assert_pixels("#playbook-execution", "run-success", skip_layouts=["mobile"])
 
+        # Cause the playbook to hang and then cancel it
+
+        b.set_checked(self.role_var_row("test_hang") + " input", True)
+        b.click("#playbook-run")
+        b.wait_in_text(self.play_row("linux-system-roles.test"), "Wait indefinitely")
+        b.click("#playbook-stop")
+
+        b.wait_in_text("#playbook-execution", "Aborted")
+        self.expand_play_row("linux-system-roles.test")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "linux-system-roles.test : Wait indefinitelyaborted")
+        b.assert_pixels("#playbook-execution", "run-aborted", skip_layouts=["mobile"])
+
         # -> more ideas from coverage
         #
         # - "str/choices" without default
@@ -241,7 +254,6 @@ class TestSystemRoles(testlib.MachineCase):
         # - removing system role completely
         # - skipped task
         # - check run without any needed changes
-        # - cancelling a run
 
 
 if __name__ == '__main__':
