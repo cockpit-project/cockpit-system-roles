@@ -141,7 +141,7 @@ class Debouncer {
 export function useDebouncer() {
     return useObject(
         () => new Debouncer(),
-        db => db.destroy(),
+        db => { db.run_now(); db.destroy() },
         [],
     );
 }
