@@ -54,6 +54,7 @@ export interface Option {
     type: string | undefined,
     description: string | string[] | undefined,
     default: JsonValue | undefined,
+    default_yaml: string | undefined,
     choices: string[] | undefined,
 }
 
@@ -98,6 +99,7 @@ function import_Option(val: JsonValue): Option {
         type: get_optional(obj, "type", import_string),
         description: get_optional(obj, "description", import_string_or_string_array),
         default: get_optional(obj, "default", v => v),
+        default_yaml: get_optional(obj, "default_yaml", import_string),
         choices: get_optional(obj, "choices", v => import_array(v, import_string)),
     };
 }

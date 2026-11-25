@@ -53,20 +53,20 @@ const AddRoleDialog = ({
                             .filter(r => r.arguments?.argument_specs?.main?.options)
                             .filter(filter)
                             .map(
-                                r => {
+                                role => {
                                     return (
                                         <Tr
-                                            key={r.name}
+                                            key={role.name}
                                             isClickable
                                             onRowClick={
                                                 async () => {
-                                                    await add_role(config, r.name);
+                                                    await add_role(config, role.name);
                                                     Dialogs.close();
                                                 }
                                             }
                                         >
-                                            <Td>{r.name}</Td>
-                                            <Td>{r.meta?.galaxy_info?.description}</Td>
+                                            <Td>{role.name}</Td>
+                                            <Td>{role.meta?.galaxy_info?.description}</Td>
                                         </Tr>
                                     );
                                 }

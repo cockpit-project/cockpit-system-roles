@@ -14,7 +14,7 @@ const _ = cockpit.gettext;
 /* CONFIGURATION
 
    The user constructs a simple playbook via the UI that consists of a
-   couple of plays.  Each play refers to a singhle system role and
+   couple of plays.  Each play refers to a single system role and
    specifies the variables for it.  A simple example might look like
    this:
 
@@ -54,7 +54,7 @@ const _ = cockpit.gettext;
    below, and saved in "/etc/cockpit/system-roles.json".
 
    The most interesting bit is that variable values are always stored
-   in it in their JSON serialization.  For example, the "int" value 80
+   in it in their YAML serialization.  For example, the "int" value 80
    for "nbde_server_port" is stored as JSON.stringify(80), which is
    "80".  Likewise a string value like "virt" above for
    "nbde_server_firewall_zone" is stored as JSON.stringify("virt"),
@@ -67,7 +67,7 @@ const _ = cockpit.gettext;
  */
 
 export interface VarConfig {
-    value: string; // Always JSON, but maybe not valid
+    value: string; // Always YAML, but maybe not valid
 }
 
 export interface RoleConfig {
@@ -178,9 +178,9 @@ export const useAppConfig = () => {
     return { config, error };
 };
 
-export async function update_variable(config: AppConfig, role: string, name: string, value: string) {
+export async function update_variable(config: AppConfig, role: string, name: string, value: string | undefined) {
     function update_vars(vars: Record<string, VarConfig>) {
-        if (value !== "")
+        if (value !== undefined)
             return {
                 ...vars,
                 [name]: { ...vars[name], value }
