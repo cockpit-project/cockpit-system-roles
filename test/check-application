@@ -6,7 +6,22 @@
 import json
 
 import testlib
+import yaml
 
+
+class UnsafeString:
+    def __init__(self, val):
+        self.val = val
+    def __repr__(self):
+        return f"UnsafeString({self.val})"
+    def __eq__(self, other):
+        return isinstance(other, UnsafeString) and self.val == other.val
+
+def unsafe_string_constructor(loader, node):
+    value = loader.construct_scalar(node)
+    return UnsafeString(value)
+
+yaml.add_constructor('!unsafe', unsafe_string_constructor)
 
 @testlib.nondestructive
 class TestSystemRoles(testlib.MachineCase):
@@ -151,31 +166,43 @@ class TestSystemRoles(testlib.MachineCase):
         # Set a couple other variables of various types, and make some mistakes along the way
 
         b.set_checked(self.role_var_row("test_bool") + " input", True)
-        b.set_input_text(self.role_var_row("test_raw") + " input", "[ { foo: \"bar\" } ]")
-        b.wait_in_text(self.role_var_row("test_raw") + " .pf-v6-c-helper-text", "Must be valid JSON")
-        b.set_input_text(self.role_var_row("test_raw") + " input", "[ { \"foo\": \"bar\" } ]")
-        b.wait_not_present(self.role_var_row("test_raw") + ".pf-v6-c-helper-text")
         b.set_checked(self.role_var_row("test_none") + " input[type=checkbox]", True)
         b.set_input_text(self.role_var_row("test_none") + " input[type=text]", "world")
         b.select_PF(self.role_var_row("test_choices") + " .pf-v6-c-menu-toggle", "red")
         b.set_input_text(self.role_var_row("test_path") + " input", "/etc")
         b.set_input_text(self.role_var_row("test_int") + " input", "twelve")
-        b.wait_in_text(self.role_var_row("test_int") + " .pf-v6-c-helper-text", "Must be valid JSON")
+        b.wait_in_text(self.role_var_row("test_int") + " .pf-v6-c-helper-text", "Must be an integer")
         b.set_input_text(self.role_var_row("test_int") + " input", "12")
-        b.wait_not_present(self.role_var_row("test_int") + " .pf-v6-c-helper-text")
+        b.wait_not_present(self.role_var_row("test_float") + " .pf-v6-c-helper-text")
+        b.set_input_text(self.role_var_row("test_float") + " input", "twelve")
+        b.wait_in_text(self.role_var_row("test_float") + " .pf-v6-c-helper-text", "Must be a number")
+        b.set_input_text(self.role_var_row("test_float") + " input", "3.14")
+        b.wait_not_present(self.role_var_row("test_float") + " .pf-v6-c-helper-text")
+
+        # Editing raw YAML
+
+        b.click(self.role_var_row("test_raw") + " button")
+        b.wait_visible("#edit-raw-modal")
+        b.set_input_text("#edit-raw-modal textarea", '"hi')
+        b.click("#edit-raw-modal button:contains(Save)")
+        b.wait_in_text("#edit-raw-modal .pf-v6-c-alert", "Invalid YAML")
+        b.set_input_text("#edit-raw-modal textarea", '[ { \"foo\": \"bar\" } ]')
+        b.click("#edit-raw-modal button:contains(Save)")
+        b.wait_not_present("#edit-raw-modal")
 
         b.click("#playbook-run")
         b.wait_in_text("#playbook-execution", "Changes have been made")
 
-        playbook = json.loads(m.execute("cat /run/cockpit/system-roles/playbook.json"))
+        playbook = yaml.load(m.execute("cat /run/cockpit/system-roles/playbook.yml"), yaml.Loader)
 
         self.assertEqual(playbook[0]["name"], "linux-system-roles.test")
         self.assertEqual(playbook[0]["vars"]["test_bool"], True)
-        self.assertEqual(playbook[0]["vars"]["test_none"], "world")
+        self.assertEqual(playbook[0]["vars"]["test_none"], UnsafeString("world"))
         self.assertEqual(playbook[0]["vars"]["test_raw"], [ { "foo": "bar" } ])
-        self.assertEqual(playbook[0]["vars"]["test_choices"], "red")
-        self.assertEqual(playbook[0]["vars"]["test_path"], "/etc")
+        self.assertEqual(playbook[0]["vars"]["test_choices"], UnsafeString("red"))
+        self.assertEqual(playbook[0]["vars"]["test_path"], UnsafeString("/etc"))
         self.assertEqual(playbook[0]["vars"]["test_int"], 12)
+        self.assertEqual(playbook[0]["vars"]["test_float"], 3.14)
 
         # Make the playbook fail
 
@@ -198,6 +225,19 @@ class TestSystemRoles(testlib.MachineCase):
         b.wait_in_text("#playbook-execution", "Success")
         b.assert_pixels("#playbook-execution", "run-success", skip_layouts=["mobile"])
 
+        # Cause the playbook to hang and then cancel it
+
+        b.set_checked(self.role_var_row("test_hang") + " input", True)
+        b.click("#playbook-run")
+        b.wait_in_text(self.play_row("linux-system-roles.test"), "Wait indefinitely")
+        b.click("#playbook-stop")
+
+        b.wait_in_text("#playbook-execution", "Aborted")
+        self.expand_play_row("linux-system-roles.test")
+        b.wait_in_text(self.play_tasks("linux-system-roles.test"),
+                       "linux-system-roles.test : Wait indefinitelyaborted")
+        b.assert_pixels("#playbook-execution", "run-aborted", skip_layouts=["mobile"])
+
         # -> more ideas from coverage
         #
         # - "str/choices" without default
@@ -214,7 +254,6 @@ class TestSystemRoles(testlib.MachineCase):
         # - removing system role completely
         # - skipped task
         # - check run without any needed changes
-        # - cancelling a run
 
 
 if __name__ == '__main__':
