@@ -5,52 +5,67 @@
  */
 
 import cockpit from 'cockpit';
-import React from 'react';
+import React, { useState } from 'react';
 import { Checkbox } from '@patternfly/react-core/dist/esm/components/Checkbox';
 import { SimpleSelect } from 'cockpit-components-simple-select';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
+import { Split, SplitItem } from '@patternfly/react-core/dist/esm/layouts/Split';
+import { Button } from '@patternfly/react-core/dist/esm/components/Button';
+import { RhUiEditIcon } from '@patternfly/react-icons';
+import { Modal, ModalBody, ModalHeader, ModalFooter } from '@patternfly/react-core/dist/esm/components/Modal';
+import { TextArea } from '@patternfly/react-core/dist/esm/components/TextArea';
+import { Content, ContentVariants } from '@patternfly/react-core/dist/esm/components/Content';
+import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
+import * as python from "python";
 
-import { JSON_parse_carefully, JSON_parse_type, DebouncedTextInput, DebouncedFileChooserInput, useDebouncer } from "./utils";
+import { useDialogs } from "dialogs";
+
+import {
+    JSON_parse_type,
+    DebouncedTextInput, DebouncedFileChooserInput,
+    useDebouncer,
+    Description,
+} from "./utils";
 import { AppConfig, RoleConfig, update_variable } from "./config";
 import { SystemRoles, Option } from "./roles";
+
+import validate_yaml_py from "./validate-yaml.py";
 
 const _ = cockpit.gettext;
 
 /* EDITING VARIABLES
 
+   (The UI calls them "parameters".)
+
    We use different UIs for different types of variables.  A dropdown
    for strings with a limited set of choices and an on/off switch for
    booleans, for example.  If we don't have a specific UI for a type,
-   we let the user edit the JSON representation in a text input.
+   we let the user edit the YAML representation in a dialog.  This
+   dialog is the designated UI for type "raw", but it gets used also
+   for "list" and "dict", etc.
 
-   When the user edits raw JSON, leaving the text input empty means
-   that the variable will not be included in the playbook at all.  If
-   it is not empty, it must be valid JSON.  If it is not valid JSON,
-   we can not construct the playbook at all (since the playbook itself
-   wouldn't be valid JSON then), so we catch and point that out in the
-   UI.
+   If we know the default value for a variable (see below), the UI
+   will make it look as if the variable always has a value, even if it
+   is actually omitted from the playbook.  If the variable is omitted,
+   we show it with its default value instead, and let the user edit
+   that.  Thus, we trust that using the default value for a variable
+   is exactly the same as omitting it from the playbook. If that is
+   not true, it's a bug in the role.
 
-   If there is a default for a JSON text input, it is shown as a
-   placeholder.
-
-   When we _do_ have a specific UI for a type, defaults are handled
-   differently.
-
-   If we know the default value (see below), the UI will make it look
-   as if the variable always has a value, even if it is actually
-   omitted from the playbook.  If the variable is omitted, we show it
-   with its default value instead, and if the user edits it and makes
-   it equal to the default value, we will omit it from the playbook.
+   Once the user has made the first edit, the variable will no longer
+   be omitted from the playbook.  (There should be a explicit "Reset
+   to default" action, but there isn't yet.)
 
    If we don't know the default value, we have to let the user
    explicitly specify whether or not the variable should be in the
    playbook.  This is done with an additional, ugly, checkbox.
 
-   Note that there is no specific UI for "int" and "float" types.  We
-   want to use a text input for them, and that text input then behaves
-   identical to raw JSON.  We do additional validation, however, also
-   for "dict" and "list".
+   When the user edits raw YAML in a dialog, we only accept valid YAML
+   before saving anything.  This means we can always construct a valid
+   playbook.  But the empty string is valid YAML and means "null".
+   Which in turn _probably_ causes the role to use its default.  This
+   is a bit tricky, but we accept this complexity.
  */
 
 /* A bit about how values travel through Ansible, especially "null"
@@ -96,10 +111,9 @@ const _ = cockpit.gettext;
 
    Many system roles have variables of type "str" and a default of
    "null".  The default is both declared in argument_specs, and in
-   defaults/main.yml.  Thus, the value "null" as a default means "no
-   default value" in practice.  Or in other words, the behavior of the
-   role when the variable is unset can not be achieved with any
-   specific string value for this variable.
+   defaults/main.yml.  The value "null" as a default means "no default
+   value" in practice since it is not a string.  Maybe the empty
+   string has the same effect as "null", or maybe not.
 
    The following function encodes this to implement the predicate "do
    we know the default value".
@@ -111,35 +125,193 @@ function has_default(spec: Option) {
     return spec.default !== undefined && (spec.type === "raw" || spec.default !== null);
 }
 
-const EditRaw = ({
+const EditDirect = ({
+    disabled,
     value,
     update,
-    placeholder,
 } : {
+    disabled: boolean,
     value: string,
     update: (val: string) => Promise<void>,
-    placeholder: string,
 }) => {
     return (
         <DebouncedTextInput
             value={value}
             onChange={update}
-            placeholder={placeholder}
+            disabled={disabled}
         />
+    );
+};
+
+interface YAMLMessage {
+    message: string;
+    line: number;
+    column: number;
+}
+
+interface YAMLError {
+    context?: YAMLMessage;
+    problem?: YAMLMessage;
+}
+
+const YAMLMessageDetails = ({ msg } : { msg: YAMLMessage | undefined }) => {
+    if (!msg || !msg.message)
+        return null;
+
+    return (
+        <div>
+            {msg.message}
+            {"\n"}
+            {msg.line >= 0 && cockpit.format(_("(line $0, column $1)"), msg.line + 1, msg.column + 1)}
+        </div>
+    );
+};
+
+const EditRawDialog = ({
+    name,
+    spec,
+    value,
+    update,
+} : {
+    name: string,
+    spec: Option,
+    value: string,
+    update: (val: string) => Promise<void>,
+}) => {
+    const Dialogs = useDialogs();
+    const [localValue, setLocalValue] = useState<string>(value);
+    const [error, setError] = useState<React.ReactNode>(null);
+
+    return (
+        <Modal
+            id="edit-raw-modal"
+            isOpen
+            variant="large"
+            position="top"
+            onClose={Dialogs.close}
+        >
+            <ModalHeader
+                title={cockpit.format(_("Edit $0"), name)}
+            />
+            <ModalBody>
+                {
+                    error &&
+                        <>
+                            <Alert
+                                ouiaId="dialog-error-message"
+                                variant='danger'
+                                isInline
+                                title={_("Invalid YAML")}
+                            >
+                                {error}
+                            </Alert>
+                            <br />
+                        </>
+                }
+                <Description>
+                    {spec.description}
+                </Description>
+                <br />
+                <Content component={ContentVariants.p}>
+                    {_("Write YAML here.  Strings are subject to Jinja2 expansion.")}
+                </Content>
+                <TextArea
+                    className="ct-monospace-textarea ct-big-textarea"
+                    value={localValue}
+                    resizeOrientation="vertical"
+                    onChange={
+                        (_event, value) => {
+                            setError("");
+                            setLocalValue(value);
+                        }
+                    }
+                />
+
+            </ModalBody>
+            <ModalFooter>
+                <Button
+                    onClick={
+                        async () => {
+                            const err = await python.spawn(validate_yaml_py, [], { }).input(localValue);
+                            if (err) {
+                                const data = JSON.parse(err) as YAMLError;
+                                setError(
+                                    <>
+                                        <YAMLMessageDetails msg={data.context} />
+                                        <YAMLMessageDetails msg={data.problem} />
+                                    </>
+                                );
+                                return;
+                            }
+                            update(localValue);
+                            Dialogs.close();
+                        }
+                    }
+                >
+                    {_("Save")}
+                </Button>
+            </ModalFooter>
+        </Modal>
+    );
+};
+
+const EditRaw = ({
+    name,
+    spec,
+    value,
+    update,
+    disabled,
+} : {
+    name: string,
+    spec: Option,
+    value: string,
+    update: (val: string) => Promise<void>,
+    disabled: boolean,
+}) => {
+    const Dialogs = useDialogs();
+
+    return (
+        <Split className={disabled ? "ct-raw-value-disabled" : "ct-raw-value"}>
+            <SplitItem isFilled>
+                <Content component={ContentVariants.pre}>
+                    {value}
+                </Content>
+            </SplitItem>
+            <SplitItem>
+                <Button
+                    variant="plain"
+                    icon={<RhUiEditIcon />}
+                    isAriaDisabled={disabled}
+                    onClick={
+                        () => Dialogs.show(
+                            <EditRawDialog
+                                name={name}
+                                spec={spec}
+                                value={value}
+                                update={update}
+                            />
+                        )
+                    }
+                />
+            </SplitItem>
+        </Split>
     );
 };
 
 const EditStr = ({
     value,
     update,
+    disabled,
 } : {
     value: string,
     update: (val: string) => Promise<void>,
+    disabled: boolean,
 }) => {
     return (
         <DebouncedTextInput
             value={JSON_parse_type(value, "")}
             onChange={val => update(JSON.stringify(val))}
+            disabled={disabled}
         />
     );
 };
@@ -148,16 +320,19 @@ const EditChoices = ({
     value,
     update,
     choices,
+    disabled,
 } : {
     value: string,
     update: (val: string) => Promise<void>,
     choices: string[],
+    disabled: boolean,
 }) => {
     // XXX - we use a debouncer to make the "Run" button wait for our update promise to settle...
     const debouncer = useDebouncer();
 
     return (
         <SimpleSelect<string>
+            isDisabled={disabled}
             selected={JSON_parse_type(value, choices[0])}
             options={choices.map(c => ({ value: c, content: c }))}
             onSelect={
@@ -172,9 +347,11 @@ const EditChoices = ({
 const EditBool = ({
     value,
     update,
+    disabled,
 } : {
     value: string,
     update: (val: string) => Promise<void>,
+    disabled: boolean,
 }) => {
     // XXX - we use a debouncer to make the "Run" button wait for our update promise to settle...
     const debouncer = useDebouncer();
@@ -182,6 +359,7 @@ const EditBool = ({
     const v = JSON_parse_type(value, false);
     return (
         <Switch
+            isDisabled={disabled}
             isChecked={v}
             label={v ? _("True") : _("False")}
             onChange={
@@ -196,12 +374,15 @@ const EditBool = ({
 const EditPath = ({
     value,
     update,
+    disabled,
 } : {
     value: string,
     update: (val: string) => Promise<void>,
+    disabled: boolean,
 }) => {
     return (
         <DebouncedFileChooserInput
+            disabled={disabled}
             value={JSON_parse_type(value, "")}
             onChange={val => update(JSON.stringify(val))}
             fileChooserProps={
@@ -214,34 +395,20 @@ const EditPath = ({
     );
 };
 
-const specific_ui_types = ["str", "bool", "path"];
-
 function validate_value(value: string, spec: Option) {
-    if (value === "")
-        return;
+    // We only need to validate variables that are edited via the
+    // EditDirect component.  The rest are guaranteed to be valid by
+    // construction.
 
-    if (specific_ui_types.includes(spec.type || "str")) {
-        // No extra validation done yet.
-        return;
+    if (spec.type === "int") {
+        const parsed = Number(value);
+        if (value === "" || !Number.isInteger(parsed))
+            return _("Must be an integer");
+    } else if (spec.type === "float") {
+        const parsed = Number(value);
+        if (value === "" || Number.isNaN(parsed))
+            return _("Must be a number");
     }
-
-    // Rest must be JSON.
-    let val;
-    try {
-        val = JSON.parse(value);
-    } catch {
-        return _("Must be valid JSON");
-    }
-
-    // Additional validation
-    if (spec.type === "int" && !Number.isInteger(val))
-        return _("Must be an integer");
-    if (spec.type === "float" && typeof val !== "number")
-        return _("Must be a number");
-    if (spec.type === "list" && !Array.isArray(val))
-        return _("Must be a JSON array");
-    if (spec.type === "dict" && !(val && typeof val === "object" && !Array.isArray(val)))
-        return _("Must be a JSON object");
 }
 
 export const EditVariable = ({
@@ -257,45 +424,93 @@ export const EditVariable = ({
 }) => {
     const conf_v = role.vars[name];
 
-    let value = (conf_v && conf_v.value) ? conf_v.value : "";
+    let stored_value: string | undefined = conf_v?.value;
     const type = spec.type || "str";
 
-    let need_checkbox = false;
-    let enabled = false;
+    let displayed_value: string;
+    if (stored_value === undefined) {
+        // We always come up with a value to display.  For variables
+        // with a default, it's the default.  Variables without a
+        // default and without a value need to be explicitly enabled,
+        // but we want to show the editing widget for them at all
+        // times.  So we use something that is a reasonable starting
+        // point for editing.
 
-    if (specific_ui_types.includes(type)) {
-        // Type-specific UI, we care about whether there is a default.
         if (has_default(spec)) {
-            if (!value)
-                value = JSON.stringify(spec.default);
+            // For types with a specific editing widget, we need the
+            // default as JSON since those widgets parse it as JSON.
+            // For types that use EditRaw, we want it as YAML, since
+            // giving the default to the user as JSON would be weird.
+
+            const json_types = ["str", "int", "float", "bool", "path"];
+
+            if (json_types.includes(type))
+                displayed_value = JSON.stringify(spec.default);
+            else
+                displayed_value = spec.default_yaml || "";
         } else {
-            need_checkbox = true;
-            enabled = !!value;
+            if (type === "str" && spec.choices)
+                displayed_value = JSON.stringify(spec.choices[0]);
+            else if (type === "str")
+                displayed_value = '""';
+            else if (type === "bool")
+                displayed_value = "false";
+            else if (type === "path")
+                displayed_value = '"\"';
+            else
+                displayed_value = "";
         }
-    }
+    } else
+        displayed_value = stored_value;
+
+    const need_checkbox = !has_default(spec);
+    const disabled = need_checkbox && (stored_value === undefined || !!conf_v?.disabled);
 
     async function update(val: string) {
-        if (specific_ui_types.includes(type)) {
-            if (has_default(spec) && JSON_parse_carefully(val) === spec.default)
-                val = "";
-        }
-        await update_variable(config, role.name, name, val);
+        await update_variable(config, role.name, name, val, false);
     }
 
     let comp;
-
     if (type === "str" && spec.choices)
-        comp = <EditChoices value={value} update={update} choices={spec.choices} />;
+        comp = <EditChoices disabled={disabled} value={displayed_value} update={update} choices={spec.choices} />;
     else if (type === "str")
-        comp = <EditStr value={value} update={update} />;
+        comp = <EditStr disabled={disabled} value={displayed_value} update={update} />;
     else if (type === "bool")
-        comp = <EditBool value={value} update={update} />;
+        comp = <EditBool disabled={disabled} value={displayed_value} update={update} />;
     else if (type === "path")
-        comp = <EditPath value={value} update={update} />;
-    else
-        comp = <EditRaw value={value} placeholder={has_default(spec) ? JSON.stringify(spec.default) : ""} update={update} />;
+        comp = <EditPath disabled={disabled} value={displayed_value} update={update} />;
+    else if (type === "int") {
+        comp = (
+            <EditDirect
+                disabled={disabled}
+                value={displayed_value}
+                update={update}
+            />
+        );
+    } else if (type === "float") {
+        comp = (
+            <EditDirect
+                disabled={disabled}
+                value={displayed_value}
+                update={update}
+            />
+        );
+    } else {
+        comp = (
+            <EditRaw
+                disabled={disabled}
+                name={name}
+                spec={spec}
+                value={displayed_value}
+                update={update}
+            />
+        );
+    }
 
-    const error = (!need_checkbox || enabled) && validate_value(value, spec);
+    let error;
+    if (!disabled)
+        error = validate_value(displayed_value, spec);
+
     let helper_text;
     if (error)
         helper_text = (
@@ -304,59 +519,52 @@ export const EditVariable = ({
             </HelperText>
         );
 
-    if (need_checkbox)
-        return (
-            <>
-                <Checkbox
-                    id={role.name + "/" + name}
-                    label={_("Provide a value for this variable")}
-                    isChecked={enabled}
-                    onChange={
-                        (_event, checked) => {
-                            if (checked && !enabled) {
-                                if (type === "str" && spec.choices)
-                                    update(JSON.stringify(spec.choices[0]));
-                                else if (type === "str")
-                                    update("\"\"");
-                                else if (type === "bool")
-                                    update("false");
-                                else if (type === "path")
-                                    update("\"\"");
-                                else
-                                    update("");
-                            } else if (!checked) {
-                                update("");
+    if (need_checkbox) {
+        comp = (
+            <Split hasGutter>
+                <SplitItem isFilled>
+                    {comp}
+                </SplitItem>
+                <SplitItem>
+                    <Switch
+                        id={role.name + "/" + name}
+                        isChecked={!disabled}
+                        onChange={
+                            (_event, checked) => {
+                                if (checked) {
+                                    update(displayed_value);
+                                } else {
+                                    update_variable(config, role.name, name, stored_value, true);
+                                }
                             }
                         }
-                    }
-                />
-                <br />
-                {enabled && comp}
-                {helper_text}
-            </>
-        );
-    else
-        return (
-            <>
-                {comp}
-                {helper_text}
-            </>
-        );
-};
-
-export function validate_all(config: AppConfig, system_roles: SystemRoles): boolean {
-    function validate_role(role: RoleConfig) {
-        if (!role.enabled)
-            return true;
-        const system_role = system_roles[role.name];
-        return Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).every(
-            ([name, spec]) => {
-                const conf_v = role.vars[name];
-                const value = (conf_v && conf_v.value) ? conf_v.value : "";
-                return !value || (validate_value(value, spec) === undefined);
-            }
+                    />
+                </SplitItem>
+            </Split>
         );
     }
 
-    return config.config.roles.every(validate_role);
+    return (
+        <>
+            {comp}
+            {helper_text}
+        </>
+    );
+};
+
+export function validate_role(role: RoleConfig, system_roles: SystemRoles) {
+    if (!role.enabled)
+        return true;
+    const system_role = system_roles[role.name];
+    return Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).every(
+        ([name, spec]) => {
+            const conf_v = role.vars[name];
+            const value: string | undefined = conf_v?.value;
+            return value === undefined || conf_v?.disabled || (validate_value(value, spec) === undefined);
+        }
+    );
+}
+
+export function validate_all(config: AppConfig, system_roles: SystemRoles): boolean {
+    return config.config.roles.every(role => validate_role(role, system_roles));
 }

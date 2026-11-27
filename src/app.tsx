@@ -14,21 +14,24 @@ import { Card, CardHeader, CardTitle } from '@patternfly/react-core/dist/esm/com
 import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
-import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
+import { EmptyState, EmptyStateBody } from '@patternfly/react-core/dist/esm/components/EmptyState';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button';
-import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
+import { RhUiTrashIcon, RhUiExternalLinkIcon, RhUiAddCircleIcon } from '@patternfly/react-icons';
 import { Modal, ModalBody, ModalHeader, ModalFooter } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown';
 import { Divider } from '@patternfly/react-core/dist/esm/components/Divider';
 import { Title } from '@patternfly/react-core/dist/esm/components/Title';
+import { Label, LabelStatus } from '@patternfly/react-core/dist/esm/components/Label';
 
 import { shortenstart, short_role_name, Description, KebabMenu, TwoResizableColumns } from "./utils";
 import { ToastArea } from "./toaster";
-import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role, enable_role } from "./config";
+import { useAppConfig, AppConfig, RoleConfig, add_roles, remove_role, enable_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
 import { PlaybookExecution } from "./run";
-import { EditVariable } from "./edit";
+import { EditVariable, validate_role } from "./edit";
+import { Form, FormGroup, FormHelperText } from '@patternfly/react-core/dist/esm/components/Form';
+import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
 
 const _ = cockpit.gettext;
 
@@ -44,37 +47,70 @@ const AddRoleDialog = ({
     filter: (role: SystemRole) => boolean,
 }) => {
     const Dialogs = useDialogs();
+    const [selectedRoles, setSelectedRoles] = useState<Set<string>>(() => new Set());
 
-    const body = (
-        <Table>
-            <Tbody>
-                {
-                    Object.values(roles)
-                            .filter(r => r.arguments?.argument_specs?.main?.options)
-                            .filter(filter)
-                            .map(
-                                r => {
-                                    return (
-                                        <Tr
-                                            key={r.name}
-                                            isClickable
-                                            onRowClick={
-                                                async () => {
-                                                    await add_role(config, r.name);
-                                                    Dialogs.close();
+    function toggleRole(name: string) {
+        setSelectedRoles(sel => {
+            const newSel = new Set(sel);
+            if (newSel.has(name))
+                newSel.delete(name);
+            else
+                newSel.add(name);
+            return newSel;
+        })
+    }
+
+    const useableRoles =
+        Object.values(roles)
+            .filter(r => r.arguments?.argument_specs?.main?.options);
+
+    const availableRoles = useableRoles.filter(filter);
+
+    let body;
+    if (availableRoles.length > 0) {
+        body = (
+            <Table>
+                <Tbody>
+                    {
+                        availableRoles.map(
+                            (role, index) => {
+                                return (
+                                    <Tr
+                                        key={role.name}
+                                        isClickable
+                                        onRowClick={() => toggleRole(role.name)}
+                                    >
+                                        <Td
+                                            select={
+                                                {
+                                                    isSelected: selectedRoles.has(role.name),
+                                                    rowIndex: index
                                                 }
                                             }
-                                        >
-                                            <Td>{r.name}</Td>
-                                            <Td>{r.meta?.galaxy_info?.description}</Td>
-                                        </Tr>
-                                    );
-                                }
-                            )
-                }
-            </Tbody>
-        </Table>
-    );
+                                        />
+                                        <Td>{role.name}</Td>
+                                        <Td>{role.meta?.galaxy_info?.description}</Td>
+                                    </Tr>
+                                );
+                            }
+                        )
+                    }
+                </Tbody>
+            </Table>
+        );
+    } else {
+        body = (
+            <EmptyState>
+                <EmptyStateBody>
+                    {
+                        useableRoles.length === 0
+                            ? _("No system roles available")
+                            : _("All system roles have already been added")
+                    }
+                </EmptyStateBody>
+            </EmptyState>
+        );
+    }
 
     return (
         <Modal
@@ -84,10 +120,24 @@ const AddRoleDialog = ({
             position="top"
             onClose={Dialogs.close}
         >
-            <ModalHeader title="Add System Role" />
+            <ModalHeader title="Add System Roles" />
             <ModalBody>
                 { body }
             </ModalBody>
+            <ModalFooter>
+                <Button
+                    variant="primary"
+                    isAriaDisabled={availableRoles.length === 0 || selectedRoles.size === 0}
+                    onClick={
+                        async () => {
+                            await add_roles(config, [...selectedRoles.values()]);
+                            Dialogs.close();
+                        }
+                    }
+                >
+                    {_("Add roles")}
+                </Button>
+            </ModalFooter>
         </Modal>
     );
 };
@@ -114,7 +164,7 @@ const RemoveRoleDialog = ({
                 titleIconVariant="danger"
             />
             <ModalBody>
-                {_("Removing a system role will lose all its variable settings.")}
+                {_("Removing a system role will lose all its parameter values.")}
             </ModalBody>
             <ModalFooter>
                 <Button
@@ -153,25 +203,27 @@ const VarRow = ({
 }) => {
     const short_name = short_role_name(role.name);
     return (
-        <div data-var={name}>
-            <div className="ct-row-skip ct-top-border" />
-            <div className="ct-row-skip">
-                <b>{shortenstart(short_name + "_", name)}</b> ({spec.type})
-            </div>
-            <div className="ct-row-skip">
-                <EditVariable
-                    config={config}
-                    role={role}
-                    name={name}
-                    spec={spec}
-                />
-            </div>
-            <div className="ct-row-skip">
-                <Description>
-                    {spec.description}
-                </Description>
-            </div>
-        </div>
+        <FormGroup
+            data-var={name}
+            label={shortenstart(short_name + "_", name)}
+            labelInfo={"(" + (spec.type || "str") + ")"}
+        >
+            <EditVariable
+                config={config}
+                role={role}
+                name={name}
+                spec={spec}
+            />
+            <FormHelperText>
+                <HelperText>
+                    <HelperTextItem>
+                        <Description>
+                            {spec.description}
+                        </Description>
+                    </HelperTextItem>
+                </HelperText>
+            </FormHelperText>
+        </FormGroup>
     );
 };
 
@@ -192,22 +244,25 @@ const RolePanel = ({
             <Description>
                 {system_role.meta?.galaxy_info?.description}
             </Description>
-            {
-                Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).map(
-                    ([name, spec]) => {
-                        return (
-                            <VarRow
-                                key={name}
-                                config={config}
-                                role={role}
-                                name={name}
-                                spec={spec}
-                            />
-                        );
-                    }
-                )
-            }
-            <div className="ct-row-skip" />
+            <br />
+            <Form isHorizontal className="ct-wide-form">
+                {
+                    Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).map(
+                        ([name, spec]) => {
+                            return (
+                                <VarRow
+                                    key={name}
+                                    config={config}
+                                    role={role}
+                                    name={name}
+                                    spec={spec}
+                                />
+                            );
+                        }
+                    )
+                }
+            </Form>
+            <br />
         </div>
     );
 };
@@ -215,11 +270,13 @@ const RolePanel = ({
 const RoleRow = ({
     config,
     role,
+    system_roles,
     isSelected,
     onSelect,
 } : {
     config: AppConfig,
     role: RoleConfig,
+    system_roles: SystemRoles,
     isSelected: boolean,
     onSelect: () => void,
 }) => {
@@ -249,6 +306,22 @@ const RoleRow = ({
                 onClick={onSelect}
             >
                 <b>{short_name}</b>
+            </Td>
+            <Td modifier="fitContent">
+                {
+                    // HACK - we keep this always in the DOM so that
+                    // the row height doesn't change when it should be
+                    // visible.
+                    //
+                    // XXX - dtrt for aria
+                }
+                <Label
+                    style={{ visibility: validate_role(role, system_roles) ? "hidden" : "visible" }}
+                    variant="outline"
+                    status={LabelStatus.danger}
+                >
+                    {_("Invalid parameter values")}
+                </Label>
             </Td>
             <Td modifier="fitContent" hasAction>
                 <KebabMenu
@@ -305,19 +378,18 @@ const ConfiguredRoles = ({
     const actions = (
         <Button
             id="add-role"
+            icon={<RhUiAddCircleIcon />}
             onClick={add_role}
         >
-            {_("Add System Role")}
+            {_("Add System Roles")}
         </Button>
     );
 
-    const selectedRoleConfig = config.config.roles.find(r => r.name === selectedRole) || config.config.roles[0];
+    let body;
+    if (config.config.roles.length > 0) {
+        const selectedRoleConfig = config.config.roles.find(r => r.name === selectedRole) || config.config.roles[0];
 
-    return (
-        <Card id="configured-roles">
-            <CardHeader actions={{ actions }}>
-                <CardTitle>{_("System Roles")}</CardTitle>
-            </CardHeader>
+        body = (
             <TwoResizableColumns>
                 <Table>
                     <Tbody>
@@ -330,6 +402,7 @@ const ConfiguredRoles = ({
                                                 config={config}
                                                 key={role.name}
                                                 role={role}
+                                                system_roles={roles}
                                                 isSelected={role === selectedRoleConfig}
                                                 onSelect={() => setSelectedRole(role.name)}
                                             />
@@ -354,6 +427,25 @@ const ConfiguredRoles = ({
                         : null
                 }
             </TwoResizableColumns>
+        );
+    } else {
+        body = (
+            <EmptyState
+                titleText={_("No system roles added")}
+            >
+                <EmptyStateBody>
+                    {_("Add system roles to and edit their parameters.  Run the playbook to apply them to your local machine.")}
+                </EmptyStateBody>
+            </EmptyState>
+        );
+    }
+
+    return (
+        <Card id="configured-roles">
+            <CardHeader actions={{ actions }}>
+                <CardTitle>{_("System Roles")}</CardTitle>
+            </CardHeader>
+            { body }
         </Card>
     );
 };

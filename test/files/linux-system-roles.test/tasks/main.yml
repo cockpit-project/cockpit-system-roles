@@ -10,6 +10,11 @@
     dest: "/tmp/test_output.json"
     mode: "0644"
 
+- name: Wait indefinitely
+  ansible.builtin.command:
+    cmd: sleep infinity
+  when: test_hang | bool
+
 - name: Fail on purpose
   ansible.builtin.fail:
     msg: The test role was asked to fail via test_fail.
