@@ -517,21 +517,21 @@ export const EditVariable = ({
         );
 };
 
-export function validate_all(config: AppConfig, system_roles: SystemRoles): boolean {
-    function validate_role(role: RoleConfig) {
-        if (!role.enabled)
-            return true;
-        const system_role = system_roles[role.name];
-        return Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).every(
-            ([name, spec]) => {
-                if (!role.enabled)
-                    return true;
-                const conf_v = role.vars[name];
-                const value: string | undefined = (conf_v && conf_v.value !== undefined) ? conf_v.value : undefined;
-                return value === undefined || (validate_value(value, spec) === undefined);
-            }
-        );
-    }
+export function validate_role(role: RoleConfig, system_roles: SystemRoles) {
+    if (!role.enabled)
+        return true;
+    const system_role = system_roles[role.name];
+    return Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).every(
+        ([name, spec]) => {
+            if (!role.enabled)
+                return true;
+            const conf_v = role.vars[name];
+            const value: string | undefined = (conf_v && conf_v.value !== undefined) ? conf_v.value : undefined;
+            return value === undefined || (validate_value(value, spec) === undefined);
+        }
+    );
+}
 
-    return config.config.roles.every(validate_role);
+export function validate_all(config: AppConfig, system_roles: SystemRoles): boolean {
+    return config.config.roles.every(role => validate_role(role, system_roles));
 }

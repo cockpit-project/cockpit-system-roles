@@ -172,6 +172,7 @@ class TestSystemRoles(testlib.MachineCase):
         b.set_input_text(self.role_var_row("test_path") + " input", "/etc")
         b.set_input_text(self.role_var_row("test_int") + " input", "twelve")
         b.wait_in_text(self.role_var_row("test_int") + " .pf-v6-c-helper-text", "Must be an integer")
+        b.wait_in_text(self.role_row("linux-system-roles.test"), "Invalid parameter values")
         b.set_input_text(self.role_var_row("test_int") + " input", "12")
         b.wait_not_present(self.role_var_row("test_float") + " .pf-v6-c-helper-text")
         b.set_input_text(self.role_var_row("test_float") + " input", "twelve")
