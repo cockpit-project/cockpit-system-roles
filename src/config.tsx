@@ -68,6 +68,7 @@ const _ = cockpit.gettext;
 
 export interface VarConfig {
     value: string; // Always YAML, but maybe not valid
+    disabled?: boolean;
 }
 
 export interface RoleConfig {
@@ -178,12 +179,12 @@ export const useAppConfig = () => {
     return { config, error };
 };
 
-export async function update_variable(config: AppConfig, role: string, name: string, value: string | undefined) {
+export async function update_variable(config: AppConfig, role: string, name: string, value: string | undefined, disabled: boolean) {
     function update_vars(vars: Record<string, VarConfig>) {
         if (value !== undefined)
             return {
                 ...vars,
-                [name]: { ...vars[name], value }
+                [name]: { value, ...( disabled ? { disabled } : {}) }
             };
         else {
             const new_vars = { ...vars };

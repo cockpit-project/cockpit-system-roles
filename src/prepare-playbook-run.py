@@ -37,7 +37,7 @@ def make_play(role):
     return {
         "hosts": "all",
         "name": role["name"],
-        "vars": { name: make_value(var) for name, var in role["vars"].items() },
+        "vars": { name: make_value(var) for name, var in role["vars"].items() if not var.get("disabled") },
         "roles": [ role["name"] ],
     }
 

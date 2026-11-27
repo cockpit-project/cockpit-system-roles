@@ -124,9 +124,11 @@ function has_default(spec: Option) {
 }
 
 const EditDirect = ({
+    disabled,
     value,
     update,
 } : {
+    disabled: boolean,
     value: string,
     update: (val: string) => Promise<void>,
 }) => {
@@ -134,6 +136,7 @@ const EditDirect = ({
         <DebouncedTextInput
             value={value}
             onChange={update}
+            disabled={disabled}
         />
     );
 };
@@ -255,16 +258,18 @@ const EditRaw = ({
     spec,
     value,
     update,
+    disabled,
 } : {
     name: string,
     spec: Option,
     value: string,
     update: (val: string) => Promise<void>,
+    disabled: boolean,
 }) => {
     const Dialogs = useDialogs();
 
     return (
-        <Split className="ct-raw-value">
+        <Split className={disabled ? "ct-raw-value-disabled" : "ct-raw-value"}>
             <SplitItem isFilled>
                 <Content component={ContentVariants.pre}>
                     {value}
@@ -274,6 +279,7 @@ const EditRaw = ({
                 <Button
                     variant="plain"
                     icon={<RhUiEditIcon />}
+                    isAriaDisabled={disabled}
                     onClick={
                         () => Dialogs.show(
                             <EditRawDialog
@@ -293,14 +299,17 @@ const EditRaw = ({
 const EditStr = ({
     value,
     update,
+    disabled,
 } : {
     value: string,
     update: (val: string) => Promise<void>,
+    disabled: boolean,
 }) => {
     return (
         <DebouncedTextInput
             value={JSON_parse_type(value, "")}
             onChange={val => update(JSON.stringify(val))}
+            disabled={disabled}
         />
     );
 };
@@ -309,16 +318,19 @@ const EditChoices = ({
     value,
     update,
     choices,
+    disabled,
 } : {
     value: string,
     update: (val: string) => Promise<void>,
     choices: string[],
+    disabled: boolean,
 }) => {
     // XXX - we use a debouncer to make the "Run" button wait for our update promise to settle...
     const debouncer = useDebouncer();
 
     return (
         <SimpleSelect<string>
+            isDisabled={disabled}
             selected={JSON_parse_type(value, choices[0])}
             options={choices.map(c => ({ value: c, content: c }))}
             onSelect={
@@ -333,9 +345,11 @@ const EditChoices = ({
 const EditBool = ({
     value,
     update,
+    disabled,
 } : {
     value: string,
     update: (val: string) => Promise<void>,
+    disabled: boolean,
 }) => {
     // XXX - we use a debouncer to make the "Run" button wait for our update promise to settle...
     const debouncer = useDebouncer();
@@ -343,6 +357,7 @@ const EditBool = ({
     const v = JSON_parse_type(value, false);
     return (
         <Switch
+            isDisabled={disabled}
             isChecked={v}
             label={v ? _("True") : _("False")}
             onChange={
@@ -357,12 +372,15 @@ const EditBool = ({
 const EditPath = ({
     value,
     update,
+    disabled,
 } : {
     value: string,
     update: (val: string) => Promise<void>,
+    disabled: boolean,
 }) => {
     return (
         <DebouncedFileChooserInput
+            disabled={disabled}
             value={JSON_parse_type(value, "")}
             onChange={val => update(JSON.stringify(val))}
             fileChooserProps={
@@ -404,11 +422,19 @@ export const EditVariable = ({
 }) => {
     const conf_v = role.vars[name];
 
-    let value: string | undefined = (conf_v && conf_v.value !== undefined) ? conf_v.value : undefined;
+    let stored_value: string | undefined = conf_v?.value;
     const type = spec.type || "str";
 
-    if (has_default(spec)) {
-        if (value === undefined) {
+    let displayed_value: string;
+    if (stored_value === undefined) {
+        // We always come up with a value to display.  For variables
+        // with a default, it's the default.  Variables without a
+        // default and without a value need to be explicitly enabled,
+        // but we want to show the editing widget for them at all
+        // times.  So we use something that is a reasonable starting
+        // point for editing.
+
+        if (has_default(spec)) {
             // For types with a specific editing widget, we need the
             // default as JSON since those widgets parse it as JSON.
             // For types that use EditRaw, we want it as YAML, since
@@ -417,57 +443,71 @@ export const EditVariable = ({
             const json_types = ["str", "int", "float", "bool", "path"];
 
             if (json_types.includes(type))
-                value = JSON.stringify(spec.default);
+                displayed_value = JSON.stringify(spec.default);
             else
-                value = spec.default_yaml;
+                displayed_value = spec.default_yaml || "";
+        } else {
+            if (type === "str" && spec.choices)
+                displayed_value = JSON.stringify(spec.choices[0]);
+            else if (type === "str")
+                displayed_value = '""';
+            else if (type === "bool")
+                displayed_value = "false";
+            else if (type === "path")
+                displayed_value = '"\"';
+            else
+                displayed_value = "";
         }
-    }
+    } else
+        displayed_value = stored_value;
 
     const need_checkbox = !has_default(spec);
+    const disabled = need_checkbox && (stored_value === undefined || !!conf_v?.disabled);
 
-    async function update(val: string | undefined) {
-        await update_variable(config, role.name, name, val);
+    async function update(val: string) {
+        await update_variable(config, role.name, name, val, false);
     }
 
     let comp;
-    if (value !== undefined) {
-        if (type === "str" && spec.choices)
-            comp = <EditChoices value={value} update={update} choices={spec.choices} />;
-        else if (type === "str")
-            comp = <EditStr value={value} update={update} />;
-        else if (type === "bool")
-            comp = <EditBool value={value} update={update} />;
-        else if (type === "path")
-            comp = <EditPath value={value} update={update} />;
-        else if (type === "int") {
-            comp = (
-                <EditDirect
-                    value={value}
-                    update={update}
-                />
-            );
-        } else if (type === "float") {
-            comp = (
-                <EditDirect
-                    value={value}
-                    update={update}
-                />
-            );
-        } else {
-            comp = (
-                <EditRaw
-                    name={name}
-                    spec={spec}
-                    value={value}
-                    update={update}
-                />
-            );
-        }
+    if (type === "str" && spec.choices)
+        comp = <EditChoices disabled={disabled} value={displayed_value} update={update} choices={spec.choices} />;
+    else if (type === "str")
+        comp = <EditStr disabled={disabled} value={displayed_value} update={update} />;
+    else if (type === "bool")
+        comp = <EditBool disabled={disabled} value={displayed_value} update={update} />;
+    else if (type === "path")
+        comp = <EditPath disabled={disabled} value={displayed_value} update={update} />;
+    else if (type === "int") {
+        comp = (
+            <EditDirect
+                disabled={disabled}
+                value={displayed_value}
+                update={update}
+            />
+        );
+    } else if (type === "float") {
+        comp = (
+            <EditDirect
+                disabled={disabled}
+                value={displayed_value}
+                update={update}
+            />
+        );
+    } else {
+        comp = (
+            <EditRaw
+                disabled={disabled}
+                name={name}
+                spec={spec}
+                value={displayed_value}
+                update={update}
+            />
+        );
     }
 
     let error;
-    if (value !== undefined)
-        error = validate_value(value, spec);
+    if (!disabled)
+        error = validate_value(displayed_value, spec);
 
     let helper_text;
     if (error)
@@ -477,44 +517,37 @@ export const EditVariable = ({
             </HelperText>
         );
 
-    if (need_checkbox)
-        return (
-            <>
-                <Checkbox
-                    id={role.name + "/" + name}
-                    label={_("Provide a value for this variable")}
-                    isChecked={value !== undefined}
-                    onChange={
-                        (_event, checked) => {
-                            if (checked && value === undefined) {
-                                if (type === "str" && spec.choices)
-                                    update(JSON.stringify(spec.choices[0]));
-                                else if (type === "str")
-                                    update("\"\"");
-                                else if (type === "bool")
-                                    update("false");
-                                else if (type === "path")
-                                    update("\"\"");
-                                else
-                                    update("");
-                            } else if (!checked) {
-                                update(undefined);
+    if (need_checkbox) {
+        comp = (
+            <Split hasGutter>
+                <SplitItem isFilled>
+                    {comp}
+                </SplitItem>
+                <SplitItem>
+                    <Switch
+                        id={role.name + "/" + name}
+                        isChecked={!disabled}
+                        onChange={
+                            (_event, checked) => {
+                                if (checked) {
+                                    update(displayed_value);
+                                } else {
+                                    update_variable(config, role.name, name, stored_value, true);
+                                }
                             }
                         }
-                    }
-                />
-                <br />
-                {comp}
-                {helper_text}
-            </>
+                    />
+                </SplitItem>
+            </Split>
         );
-    else
-        return (
-            <>
-                {comp}
-                {helper_text}
-            </>
-        );
+    }
+
+    return (
+        <>
+            {comp}
+            {helper_text}
+        </>
+    );
 };
 
 export function validate_role(role: RoleConfig, system_roles: SystemRoles) {
@@ -523,11 +556,9 @@ export function validate_role(role: RoleConfig, system_roles: SystemRoles) {
     const system_role = system_roles[role.name];
     return Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).every(
         ([name, spec]) => {
-            if (!role.enabled)
-                return true;
             const conf_v = role.vars[name];
-            const value: string | undefined = (conf_v && conf_v.value !== undefined) ? conf_v.value : undefined;
-            return value === undefined || (validate_value(value, spec) === undefined);
+            const value: string | undefined = conf_v?.value;
+            return value === undefined || conf_v?.disabled || (validate_value(value, spec) === undefined);
         }
     );
 }

@@ -30,6 +30,8 @@ import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role, enable_role
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
 import { PlaybookExecution } from "./run";
 import { EditVariable, validate_role } from "./edit";
+import { Form, FormGroup, FormHelperText } from '@patternfly/react-core/dist/esm/components/Form';
+import { HelperText, HelperTextItem } from '@patternfly/react-core/dist/esm/components/HelperText';
 
 const _ = cockpit.gettext;
 
@@ -154,25 +156,27 @@ const VarRow = ({
 }) => {
     const short_name = short_role_name(role.name);
     return (
-        <div data-var={name}>
-            <div className="ct-row-skip ct-top-border" />
-            <div className="ct-row-skip">
-                <b>{shortenstart(short_name + "_", name)}</b> ({spec.type})
-            </div>
-            <div className="ct-row-skip">
-                <EditVariable
-                    config={config}
-                    role={role}
-                    name={name}
-                    spec={spec}
-                />
-            </div>
-            <div className="ct-row-skip">
-                <Description>
-                    {spec.description}
-                </Description>
-            </div>
-        </div>
+        <FormGroup
+            data-var={name}
+            label={shortenstart(short_name + "_", name)}
+            labelInfo={"(" + (spec.type || "str") + ")"}
+        >
+            <EditVariable
+                config={config}
+                role={role}
+                name={name}
+                spec={spec}
+            />
+            <FormHelperText>
+                <HelperText>
+                    <HelperTextItem>
+                        <Description>
+                            {spec.description}
+                        </Description>
+                    </HelperTextItem>
+                </HelperText>
+            </FormHelperText>
+        </FormGroup>
     );
 };
 
@@ -193,22 +197,25 @@ const RolePanel = ({
             <Description>
                 {system_role.meta?.galaxy_info?.description}
             </Description>
-            {
-                Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).map(
-                    ([name, spec]) => {
-                        return (
-                            <VarRow
-                                key={name}
-                                config={config}
-                                role={role}
-                                name={name}
-                                spec={spec}
-                            />
-                        );
-                    }
-                )
-            }
-            <div className="ct-row-skip" />
+            <br />
+            <Form isHorizontal className="ct-wide-form">
+                {
+                    Object.entries(system_role.arguments?.argument_specs?.main?.options || {}).map(
+                        ([name, spec]) => {
+                            return (
+                                <VarRow
+                                    key={name}
+                                    config={config}
+                                    role={role}
+                                    name={name}
+                                    spec={spec}
+                                />
+                            );
+                        }
+                    )
+                }
+            </Form>
+            <br />
         </div>
     );
 };

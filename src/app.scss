@@ -29,16 +29,6 @@
     }
 }
 
-// Typography helper for the "role variable editing panel"
-
-.ct-row-skip {
-    margin-block-start: 0.5em;
-}
-
-.ct-top-border {
-    border-block-start: solid var(--pf-t--global--border--color--default) 1px;
-}
-
 // Adjust borders of expandable tables that are directly in cards.
 // The card provides the rounded bottom border and we need to switch
 // off the tables own ones.
@@ -66,6 +56,20 @@
 
 .ct-raw-value {
     font-family: var(--pf-t--global--font--family--mono);
-    background: var(--pf-t--global--background--color--secondary--default);
+    background-color: var(--pf-t--global--background--color--secondary--default);
     padding: 1ex;
+    border-radius: var(--pf-t--global--border--radius--control--form-element);
+}
+
+.ct-raw-value-disabled {
+    font-family: var(--pf-t--global--font--family--mono);
+    background-color: var(--pf-t--global--background--color--disabled--default);
+    color: var(--pf-t--global--text--color--on-disabled);
+    --pf-v6-c-content--Color: var(--pf-t--global--text--color--on-disabled);
+    padding: 1ex;
+    border-radius: var(--pf-t--global--border--radius--control--form-element);
+}
+
+.ct-wide-form {
+    --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: 20em;
 }
