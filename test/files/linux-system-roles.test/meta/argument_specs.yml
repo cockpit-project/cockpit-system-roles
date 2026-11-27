@@ -26,9 +26,13 @@ argument_specs:
           - An arbitrary flag.
       test_raw:
         type: raw
-        default: world
+        default:
+          - eins
+          - no
+          - foo: bar
+            baz: yo
         description:
-          - A raw value with a string as the default
+          - A raw value with a complex value as the default
       test_none:
         description: A variable without type and default.
       test_choices:
@@ -46,9 +50,18 @@ argument_specs:
       test_int:
         type: int
         default: 0
-        description: A integer.
+        description: An integer.
+      test_float:
+        type: float
+        default: 2.17
+        description: A floating point number.
       test_fail:
         type: bool
         default: false
         description:
           - When true, the role fails on purpose.
+      test_hang:
+        type: bool
+        default: false
+        description:
+          - When true, the role stops and waits indefinitely.

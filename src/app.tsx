@@ -22,13 +22,14 @@ import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown';
 import { Divider } from '@patternfly/react-core/dist/esm/components/Divider';
 import { Title } from '@patternfly/react-core/dist/esm/components/Title';
+import { Label, LabelStatus } from '@patternfly/react-core/dist/esm/components/Label';
 
 import { shortenstart, short_role_name, Description, KebabMenu, TwoResizableColumns } from "./utils";
 import { ToastArea } from "./toaster";
 import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role, enable_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
 import { PlaybookExecution } from "./run";
-import { EditVariable } from "./edit";
+import { EditVariable, validate_role } from "./edit";
 
 const _ = cockpit.gettext;
 
@@ -53,20 +54,20 @@ const AddRoleDialog = ({
                             .filter(r => r.arguments?.argument_specs?.main?.options)
                             .filter(filter)
                             .map(
-                                r => {
+                                role => {
                                     return (
                                         <Tr
-                                            key={r.name}
+                                            key={role.name}
                                             isClickable
                                             onRowClick={
                                                 async () => {
-                                                    await add_role(config, r.name);
+                                                    await add_role(config, role.name);
                                                     Dialogs.close();
                                                 }
                                             }
                                         >
-                                            <Td>{r.name}</Td>
-                                            <Td>{r.meta?.galaxy_info?.description}</Td>
+                                            <Td>{role.name}</Td>
+                                            <Td>{role.meta?.galaxy_info?.description}</Td>
                                         </Tr>
                                     );
                                 }
@@ -215,11 +216,13 @@ const RolePanel = ({
 const RoleRow = ({
     config,
     role,
+    system_roles,
     isSelected,
     onSelect,
 } : {
     config: AppConfig,
     role: RoleConfig,
+    system_roles: SystemRoles,
     isSelected: boolean,
     onSelect: () => void,
 }) => {
@@ -249,6 +252,22 @@ const RoleRow = ({
                 onClick={onSelect}
             >
                 <b>{short_name}</b>
+            </Td>
+            <Td modifier="fitContent">
+                {
+                    // HACK - we keep this always in the DOM so that
+                    // the row height doesn't change when it should be
+                    // visible.
+                    //
+                    // XXX - dtrt for aria
+                }
+                <Label
+                    style={{ visibility: validate_role(role, system_roles) ? "hidden" : "visible" }}
+                    variant="outline"
+                    status={LabelStatus.danger}
+                >
+                    {_("Invalid parameter values")}
+                </Label>
             </Td>
             <Td modifier="fitContent" hasAction>
                 <KebabMenu
@@ -330,6 +349,7 @@ const ConfiguredRoles = ({
                                                 config={config}
                                                 key={role.name}
                                                 role={role}
+                                                system_roles={roles}
                                                 isSelected={role === selectedRoleConfig}
                                                 onSelect={() => setSelectedRole(role.name)}
                                             />

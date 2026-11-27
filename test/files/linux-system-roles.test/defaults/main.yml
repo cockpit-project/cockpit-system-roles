@@ -2,3 +2,4 @@ test_str: hello
 test_bool: false
 test_raw: world
 test_fail: false
+test_hang: false
