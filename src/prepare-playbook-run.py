@@ -9,7 +9,9 @@ import yaml
 
 rundir = "/run/cockpit/system-roles"
 
-roles = json.loads(sys.stdin.read())
+data = json.loads(sys.stdin.read())
+
+roles = data["roles"]
 
 class UnsafeString:
     def __init__(self, val):
@@ -42,10 +44,12 @@ def make_play(role):
     }
 
 try:
-    playbook = list(map(make_play, filter(lambda r: r["enabled"], roles)))
+    playbook = [ make_play(role) for role in roles if role["enabled"] ]
 except yaml.YAMLError as err:
     sys.stderr.write(f"YAML error: {err}\n")
     exit(1)
+
+check_mode = "--check" if data["check_mode"] else ""
 
 os.umask(0o077)
 os.makedirs(rundir, exist_ok=True)
@@ -53,16 +57,20 @@ os.makedirs(rundir, exist_ok=True)
 with open(rundir + "/playbook.yml", "w") as io:
     yaml.dump(playbook, io, default_flow_style=False)
 
+open(rundir + "/run.out", "w").write(json.dumps({
+    "_event": "cockpit_system_roles_run_data",
+    "data": data
+    }) + "\n")
+
 open(rundir + "/run.sh", "w").write(
     f"""
 set -e
 cd "{rundir}"
 umask 077
-echo "{{\\"_event\\": \\"cockpit_system_role_run_start\\", \\"arguments\\": \\"$@\\"}}" >./run.out
 export ANSIBLE_STDOUT_CALLBACK=ansible.posix.jsonl
 rc=0
-ansible-playbook -i localhost, -c local "$@" "./playbook.yml" 2>"./run.err" >>"./run.out" || rc=$?
-echo "{{\\"_event\\": \\"cockpit_system_role_run_finish\\", \\"exit_code\\": $rc}}" >>./run.out
+ansible-playbook -i localhost, -c local {check_mode} "./playbook.yml" 2>"./run.err" >>"./run.out" || rc=$?
+echo "{{\\"_event\\": \\"cockpit_system_roles_run_finish\\", \\"exit_code\\": $rc}}" >>./run.out
 """)
 
 os.chmod(rundir + "/run.sh", 0o700)

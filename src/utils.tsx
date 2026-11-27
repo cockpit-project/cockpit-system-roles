@@ -78,6 +78,7 @@ export const ExpandableTr = ({
                             }
                         }
                     }
+                    style={{ visibility: expandableContent ? "visible" : "hidden" }}
                 />
                 { children }
             </Tr>

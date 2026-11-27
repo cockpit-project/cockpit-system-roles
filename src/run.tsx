@@ -20,7 +20,7 @@ import { RhUiCheckIcon, RhUiMinusIcon, PlayIcon, StopIcon, StethoscopeIcon } fro
 import { EmptyState, EmptyStateBody } from '@patternfly/react-core/dist/esm/components/EmptyState';
 
 import { toaster } from "./toaster";
-import { AppConfig } from "./config";
+import { AppConfig, RoleConfig } from "./config";
 import { run_debouncers_now, ExpandableTr, short_role_name, WithExcuse } from "./utils";
 import { SystemRoles } from "./roles";
 import { validate_all } from "./edit";
@@ -52,12 +52,15 @@ interface AnsibleEventHosts {
 }
 
 interface AnsibleEvent_CockpitRunStart {
-    _event: "cockpit_system_role_run_start",
-    arguments: string,
+    _event: "cockpit_system_roles_run_data",
+    data: {
+        check_mode: boolean,
+        roles: RoleConfig[]
+    }
 }
 
 interface AnsibleEvent_CockpitRunFinish {
-    _event: "cockpit_system_role_run_finish",
+    _event: "cockpit_system_roles_run_finish",
     exit_code: number,
 }
 
@@ -136,6 +139,7 @@ interface RunStats {
 
 interface PlaybookRunData {
     check_mode: boolean;
+    roles: RoleConfig[];
     exit_code: null | number;
     state: RunState;
     stats: null | RunStats;
@@ -143,7 +147,7 @@ interface PlaybookRunData {
 }
 
 function collate_ansible_events(events: AnsibleEvent[]) {
-    const data: PlaybookRunData = { check_mode: false, exit_code: null, state: RunState.empty, stats: null, plays: [] };
+    const data: PlaybookRunData = { check_mode: false, roles: [], exit_code: null, state: RunState.empty, stats: null, plays: [] };
 
     let running_play: string | null = null;
     let running_task: AnsibleEventTask | null = null;
@@ -196,8 +200,9 @@ function collate_ansible_events(events: AnsibleEvent[]) {
     }
 
     for (const event of events) {
-        if (event._event === "cockpit_system_role_run_start") {
-            data.check_mode = event.arguments.includes("--check");
+        if (event._event === "cockpit_system_roles_run_data") {
+            data.check_mode = event.data.check_mode;
+            data.roles = event.data.roles;
             data.state = RunState.running;
         } else if (event._event === "v2_playbook_on_play_start") {
             start_play(event.play.name);
@@ -249,7 +254,7 @@ function collate_ansible_events(events: AnsibleEvent[]) {
                 data.state = RunState.made_changes;
             else
                 data.state = RunState.ok;
-        } else if (event._event === "cockpit_system_role_run_finish") {
+        } else if (event._event === "cockpit_system_roles_run_finish") {
             data.exit_code = event.exit_code;
         } else {
             console.warn(`Unexpected Ansible event sequence.  Event ${event._event} is unknown.`);
@@ -430,11 +435,33 @@ const PlayRow = ({
             expandableContent={data.tasks.map((task_data, index) => <TaskRow key={index} context={context} data={task_data} />)}
             rowIndex={rowIndex}
         >
-            <Td modifier="fitContent">
+            <Td modifier="fitContent"  style={{ minWidth: "8em" }}>
                 <PlayState context={context} state={data.state} />
             </Td>
             <Td modifier="fitContent"><b>{short_role_name(data.name)}</b></Td>
             <Td>{data.running_task_name}</Td>
+        </ExpandableTr>
+    );
+};
+
+const PlayRowEmpty = ({
+    name,
+    rowIndex,
+} : {
+    name: string,
+    rowIndex: number,
+}) => {
+    return (
+        <ExpandableTr
+            data-play={name}
+            expandableContent={null}
+            rowIndex={rowIndex}
+        >
+            <Td modifier="fitContent" style={{ minWidth: "8em" }}>
+                <Label variant="outline" style={{ visibility: "hidden" }}>invisible</Label>
+            </Td>
+            <Td modifier="fitContent"><b>{short_role_name(name)}</b></Td>
+            <Td>{"\n"}</Td>
         </ExpandableTr>
     );
 };
@@ -548,7 +575,19 @@ const PlaybookOutput = ({
                     </Td>
                 </Tr>
             </Tbody>
-            {data.plays.map((play_data, index) => <PlayRow key={index} context={context} data={play_data} rowIndex={index} />)}
+            {
+                data.roles.filter(r => r.enabled).map(
+                    (role, index) => {
+                        if (index < data.plays.length) {
+                            const play_data = data.plays[index];
+                            cockpit.assert(play_data.name === role.name); // XXX - don't rely on this
+                            return <PlayRow key={index} context={context} data={play_data} rowIndex={index} />
+                        } else {
+                            return <PlayRowEmpty key={index} name={role.name} rowIndex={index} />
+                        }
+                    }
+                )
+            }
         </Table>
     );
 };
@@ -595,10 +634,14 @@ export const PlaybookRunner = ({
             await run_debouncers_now();
             if (!validate_all(config, system_roles))
                 return;
-            await python.spawn(prepare_playbook_run_py, [], { superuser: "require" }).input(JSON.stringify(config.config.roles));
+            const data = {
+                check_mode: dry,
+                roles: config.config.roles,
+            };
+            await python.spawn(prepare_playbook_run_py, [], { superuser: "require" }).input(JSON.stringify(data));
             if (process.state === ProcessState.FAILED)
                 process.reset();
-            await process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : [])], {}, ["--collect"]);
+            await process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh"], {}, ["--collect"]);
         } catch (ex) {
             toaster.add_error(_("Failed to start the playbook"), ex);
         }
