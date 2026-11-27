@@ -215,9 +215,10 @@ export async function update_variable(config: AppConfig, role: string, name: str
     }
 }
 
-export async function add_role(config: AppConfig, name: string) {
+export async function add_roles(config: AppConfig, names: string[]) {
     try {
-        await config.modify(conf => ({ ...conf, roles: [...conf.roles, { name, enabled: true, vars: {} }] }));
+        const new_roles = names.map(name => ({ name, enabled: true, vars: {} }));
+        await config.modify(conf => ({ ...conf, roles: [...conf.roles, ...new_roles] }));
     } catch (ex) {
         toaster.add_error(_("Failed to add role"), ex);
     }

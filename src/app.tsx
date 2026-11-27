@@ -14,9 +14,9 @@ import { Card, CardHeader, CardTitle } from '@patternfly/react-core/dist/esm/com
 import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 import { Bullseye } from '@patternfly/react-core/dist/esm/layouts/Bullseye';
 import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
-import { EmptyState } from '@patternfly/react-core/dist/esm/components/EmptyState';
+import { EmptyState, EmptyStateBody } from '@patternfly/react-core/dist/esm/components/EmptyState';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button';
-import { RhUiTrashIcon, RhUiExternalLinkIcon } from '@patternfly/react-icons';
+import { RhUiTrashIcon, RhUiExternalLinkIcon, RhUiAddCircleIcon } from '@patternfly/react-icons';
 import { Modal, ModalBody, ModalHeader, ModalFooter } from '@patternfly/react-core/dist/esm/components/Modal';
 import { Switch } from '@patternfly/react-core/dist/esm/components/Switch';
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown';
@@ -26,7 +26,7 @@ import { Label, LabelStatus } from '@patternfly/react-core/dist/esm/components/L
 
 import { shortenstart, short_role_name, Description, KebabMenu, TwoResizableColumns } from "./utils";
 import { ToastArea } from "./toaster";
-import { useAppConfig, AppConfig, RoleConfig, add_role, remove_role, enable_role } from "./config";
+import { useAppConfig, AppConfig, RoleConfig, add_roles, remove_role, enable_role } from "./config";
 import { useSystemRoles, SystemRole, SystemRoles, Option } from "./roles";
 import { PlaybookExecution } from "./run";
 import { EditVariable, validate_role } from "./edit";
@@ -47,37 +47,70 @@ const AddRoleDialog = ({
     filter: (role: SystemRole) => boolean,
 }) => {
     const Dialogs = useDialogs();
+    const [selectedRoles, setSelectedRoles] = useState<Set<string>>(() => new Set());
 
-    const body = (
-        <Table>
-            <Tbody>
-                {
-                    Object.values(roles)
-                            .filter(r => r.arguments?.argument_specs?.main?.options)
-                            .filter(filter)
-                            .map(
-                                role => {
-                                    return (
-                                        <Tr
-                                            key={role.name}
-                                            isClickable
-                                            onRowClick={
-                                                async () => {
-                                                    await add_role(config, role.name);
-                                                    Dialogs.close();
+    function toggleRole(name: string) {
+        setSelectedRoles(sel => {
+            const newSel = new Set(sel);
+            if (newSel.has(name))
+                newSel.delete(name);
+            else
+                newSel.add(name);
+            return newSel;
+        })
+    }
+
+    const useableRoles =
+        Object.values(roles)
+            .filter(r => r.arguments?.argument_specs?.main?.options);
+
+    const availableRoles = useableRoles.filter(filter);
+
+    let body;
+    if (availableRoles.length > 0) {
+        body = (
+            <Table>
+                <Tbody>
+                    {
+                        availableRoles.map(
+                            (role, index) => {
+                                return (
+                                    <Tr
+                                        key={role.name}
+                                        isClickable
+                                        onRowClick={() => toggleRole(role.name)}
+                                    >
+                                        <Td
+                                            select={
+                                                {
+                                                    isSelected: selectedRoles.has(role.name),
+                                                    rowIndex: index
                                                 }
                                             }
-                                        >
-                                            <Td>{role.name}</Td>
-                                            <Td>{role.meta?.galaxy_info?.description}</Td>
-                                        </Tr>
-                                    );
-                                }
-                            )
-                }
-            </Tbody>
-        </Table>
-    );
+                                        />
+                                        <Td>{role.name}</Td>
+                                        <Td>{role.meta?.galaxy_info?.description}</Td>
+                                    </Tr>
+                                );
+                            }
+                        )
+                    }
+                </Tbody>
+            </Table>
+        );
+    } else {
+        body = (
+            <EmptyState>
+                <EmptyStateBody>
+                    {
+                        useableRoles.length === 0
+                            ? _("No system roles available")
+                            : _("All system roles have already been added")
+                    }
+                </EmptyStateBody>
+            </EmptyState>
+        );
+    }
 
     return (
         <Modal
@@ -87,10 +120,24 @@ const AddRoleDialog = ({
             position="top"
             onClose={Dialogs.close}
         >
-            <ModalHeader title="Add System Role" />
+            <ModalHeader title="Add System Roles" />
             <ModalBody>
                 { body }
             </ModalBody>
+            <ModalFooter>
+                <Button
+                    variant="primary"
+                    isAriaDisabled={availableRoles.length === 0 || selectedRoles.size === 0}
+                    onClick={
+                        async () => {
+                            await add_roles(config, [...selectedRoles.values()]);
+                            Dialogs.close();
+                        }
+                    }
+                >
+                    {_("Add roles")}
+                </Button>
+            </ModalFooter>
         </Modal>
     );
 };
@@ -331,9 +378,10 @@ const ConfiguredRoles = ({
     const actions = (
         <Button
             id="add-role"
+            icon={<RhUiAddCircleIcon />}
             onClick={add_role}
         >
-            {_("Add System Role")}
+            {_("Add System Roles")}
         </Button>
     );
 
