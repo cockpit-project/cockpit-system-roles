@@ -53,3 +53,19 @@
 .pf-v6-c-card .pf-v6-c-table .pf-v6-c-table__tbody:last-child {
     border-block-end: 0;
 }
+
+// Text areas for editing raw values
+
+.ct-monospace-textarea textarea {
+    font-family: var(--pf-t--global--font--family--mono) !important;
+}
+
+.ct-big-textarea {
+    min-block-size: 50ex;
+}
+
+.ct-raw-value {
+    font-family: var(--pf-t--global--font--family--mono);
+    background: var(--pf-t--global--background--color--secondary--default);
+    padding: 1ex;
+}

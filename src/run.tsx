@@ -9,6 +9,7 @@ import React, { useReducer, useState, useEffect, useRef } from 'react';
 import { useInit } from "hooks";
 import { LongRunningProcess, ProcessState } from "long-running-process";
 import { superuser } from "superuser";
+import * as python from "python";
 
 import { Table, Tbody, Tr, Td } from '@patternfly/react-table';
 import { Card, CardHeader, CardTitle, CardBody } from '@patternfly/react-core/dist/esm/components/Card';
@@ -24,7 +25,7 @@ import { run_debouncers_now, ExpandableTr, short_role_name, WithExcuse } from ".
 import { SystemRoles } from "./roles";
 import { validate_all } from "./edit";
 
-import prepare_playbook_run_sh from "./prepare-playbook-run.sh";
+import prepare_playbook_run_py from "./prepare-playbook-run.py";
 
 const _ = cockpit.gettext;
 
@@ -52,7 +53,7 @@ interface AnsibleEventHosts {
 
 interface AnsibleEvent_CockpitRunStart {
     _event: "cockpit_system_role_run_start",
-    arguments: string[],
+    arguments: string,
 }
 
 interface AnsibleEvent_PlayStart {
@@ -516,34 +517,12 @@ export const PlaybookRunner = ({
         }
     );
 
-    async function generate_playbook() {
-        await run_debouncers_now();
-        if (!validate_all(config, system_roles))
-            return null;
-        const roles = config.config.roles.filter(r => r.enabled);
-        return roles.map(
-            role => {
-                return {
-                    name: role.name,
-                    hosts: "all",
-                    vars: (
-                        Object.fromEntries(
-                            Object.entries(role.vars)
-                                    .filter(([, conf]) => !!conf.value)
-                                    .map(([name, conf]) => [name, JSON.parse(conf.value)]))
-                    ),
-                    roles: [role.name],
-                };
-            }
-        );
-    }
-
     async function run({ dry } : { dry: boolean }) {
         try {
-            const playbook = await generate_playbook();
-            if (!playbook)
+            await run_debouncers_now();
+            if (!validate_all(config, system_roles))
                 return;
-            await cockpit.script(prepare_playbook_run_sh, [], { superuser: "require" }).input(JSON.stringify(playbook));
+            await python.spawn(prepare_playbook_run_py, [], { superuser: "require" }).input(JSON.stringify(config.config.roles));
             if (process.state === ProcessState.FAILED)
                 process.reset();
             await process.run(["/bin/sh", "/run/cockpit/system-roles/run.sh", ...(dry ? ["--check"] : [])], {});
