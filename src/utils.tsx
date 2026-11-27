@@ -78,6 +78,7 @@ export const ExpandableTr = ({
                             }
                         }
                     }
+                    style={{ visibility: expandableContent ? "visible" : "hidden" }}
                 />
                 { children }
             </Tr>
@@ -155,10 +156,12 @@ export const DebouncedTextInput = ({
     value,
     onChange,
     placeholder,
+    disabled,
 } : {
     value: string,
     onChange: (val: string) => Promise<void>,
     placeholder?: string,
+    disabled: boolean,
 }) => {
     const [localValue, setLocalValue] = useState<string>(value);
     const debouncer = useDebouncer();
@@ -173,6 +176,7 @@ export const DebouncedTextInput = ({
     return (
         <TextInput
             value={localValue}
+            isDisabled={disabled}
             onChange={
                 (_event, val) => {
                     setLocalValue(val);
@@ -188,10 +192,12 @@ export const DebouncedFileChooserInput = ({
     value,
     onChange,
     fileChooserProps,
+    disabled,
 } : {
     value: string,
     onChange: (val: string) => Promise<void>,
     fileChooserProps: FileChooserProps,
+    disabled: boolean,
 }) => {
     const [localValue, setLocalValue] = useState<string>(value);
     const debouncer = useDebouncer();
@@ -205,6 +211,7 @@ export const DebouncedFileChooserInput = ({
 
     return (
         <FileChooserInput
+            isDisabled={disabled}
             value={localValue}
             onChange={
                 (val, fromDialog) => {
