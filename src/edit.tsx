@@ -36,6 +36,8 @@ const _ = cockpit.gettext;
 
 /* EDITING VARIABLES
 
+   (The UI calls them "parameters".)
+
    We use different UIs for different types of variables.  A dropdown
    for strings with a limited set of choices and an on/off switch for
    booleans, for example.  If we don't have a specific UI for a type,

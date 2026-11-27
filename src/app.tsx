@@ -164,7 +164,7 @@ const RemoveRoleDialog = ({
                 titleIconVariant="danger"
             />
             <ModalBody>
-                {_("Removing a system role will lose all its variable settings.")}
+                {_("Removing a system role will lose all its parameter values.")}
             </ModalBody>
             <ModalFooter>
                 <Button
@@ -385,13 +385,11 @@ const ConfiguredRoles = ({
         </Button>
     );
 
-    const selectedRoleConfig = config.config.roles.find(r => r.name === selectedRole) || config.config.roles[0];
+    let body;
+    if (config.config.roles.length > 0) {
+        const selectedRoleConfig = config.config.roles.find(r => r.name === selectedRole) || config.config.roles[0];
 
-    return (
-        <Card id="configured-roles">
-            <CardHeader actions={{ actions }}>
-                <CardTitle>{_("System Roles")}</CardTitle>
-            </CardHeader>
+        body = (
             <TwoResizableColumns>
                 <Table>
                     <Tbody>
@@ -429,6 +427,25 @@ const ConfiguredRoles = ({
                         : null
                 }
             </TwoResizableColumns>
+        );
+    } else {
+        body = (
+            <EmptyState
+                titleText={_("No system roles added")}
+            >
+                <EmptyStateBody>
+                    {_("Add system roles to and edit their parameters.  Run the playbook to apply them to your local machine.")}
+                </EmptyStateBody>
+            </EmptyState>
+        );
+    }
+
+    return (
+        <Card id="configured-roles">
+            <CardHeader actions={{ actions }}>
+                <CardTitle>{_("System Roles")}</CardTitle>
+            </CardHeader>
+            { body }
         </Card>
     );
 };

@@ -17,6 +17,7 @@ import { Spinner } from '@patternfly/react-core/dist/esm/components/Spinner';
 import { Label, LabelGroup, LabelColor, LabelStatus } from '@patternfly/react-core/dist/esm/components/Label';
 import { Icon } from '@patternfly/react-core/dist/esm/components/Icon';
 import { RhUiCheckIcon, RhUiMinusIcon, PlayIcon, StopIcon, StethoscopeIcon } from '@patternfly/react-icons';
+import { EmptyState, EmptyStateBody } from '@patternfly/react-core/dist/esm/components/EmptyState';
 
 import { toaster } from "./toaster";
 import { AppConfig } from "./config";
@@ -528,8 +529,15 @@ const PlaybookOutput = ({
         process_state: process.state,
     };
 
-    if (data.state === RunState.empty)
-        return null;
+    if (data.state === RunState.empty) {
+        return (
+            <EmptyState>
+                <EmptyStateBody>
+                    {_("No previous playbook run")}
+                </EmptyStateBody>
+            </EmptyState>
+        );
+    }
 
     return (
         <Table isExpandable>
@@ -608,7 +616,7 @@ export const PlaybookRunner = ({
 
     let run_excuse;
     if (!valid)
-        run_excuse = _("Some playbook variables have invalid values.");
+        run_excuse = _("Some system role parameters have invalid values.");
     else if (config.config.roles.length === 0)
         run_excuse = _("Add at least one system role to run the playbook");
     else if (config.config.roles.every(r => !r.enabled))
